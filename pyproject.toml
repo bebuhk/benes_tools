@@ -1,0 +1,8 @@
+[project]
+name = "benes_tools"
+version = "0.1.0"
+dependencies = ["numpy"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
