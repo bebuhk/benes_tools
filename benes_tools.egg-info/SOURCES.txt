@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-benes_tools/__init__.py
-benes_tools/geometry.py
-benes_tools.egg-info/PKG-INFO
-benes_tools.egg-info/SOURCES.txt
-benes_tools.egg-info/dependency_links.txt
-benes_tools.egg-info/requires.txt
-benes_tools.egg-info/top_level.txt
