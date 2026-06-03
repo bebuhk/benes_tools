@@ -34,3 +34,25 @@ def xyz2spherical(coords, reverse=False, degrees=False):
             # input in degrees. convert angles (theta, phi) to radians first
             coords[:,1:] = np.radians(coords[:,1:])
         return np.array([[r * np.sin(theta) * np.cos(phi), r * np.sin(theta) * np.sin(phi), r * np.cos(theta)] for r, theta, phi in coords])
+
+
+### bene 2026-06-03: sampling the surface of a sphere (orientations) efficiently -> perfect of cDFT for molecules with rotational symmetry (i.e. linear molecules like CO2)
+def fibonacci_bene(n_full_sphere):
+    """fibonacci sampling for uniform points on the full unit sphere.
+    implemented after Gonzalez, J. A. (2010). Measurement of areas on a sphere using Fibonacci and latitude-longitude lattices. Mathematical Geosciences, 42(1), 49-64.
+    Input: 
+    n_full_sphere
+        total number of points on the full sphere (including both hemispheres).
+
+    Returns:
+    theta_deg, phi_deg
+        arrays of shape (n_full_sphere,) with the spherical coordinates in degrees.
+    """
+    golden_ratio = (1 + np.sqrt(5.0)) / 2.0
+    phi_golden = 2*np.pi * (1 - 1/golden_ratio)  # angle in radians between points in the azimuthal direction
+
+    N = int((n_full_sphere- 1) / 2 + 0.5) # the + 0.5 makes sure that we either gen n points (if n_full_sphere is odd) or n+1 points (if n_full_sphere is even)
+    i = np.arange(-N, N+1) # 
+    phi = (i % golden_ratio) * 360 / golden_ratio # azimuthal angle in radians
+    theta = np.arcsin(2 * i/ (2 * N + 1)) * 180/np.pi  # polar angle in degrees, arcsin maps to [-90, 90]
+    return theta + 90, phi

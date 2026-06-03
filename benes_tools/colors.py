@@ -1,9 +1,13 @@
 """Paul Tol's colorblind-friendly color palettes.
 
 Reference: https://personal.sron.nl/~pault/
+https://sronpersonalpages.nl/~pault/
 
 Qualitative palettes (discrete categories):
     BRIGHT, HIGH_CONTRAST, VIBRANT, MUTED, MEDIUM_CONTRAST, LIGHT, PALE, DARK
+
+Land-cover (categorical, 14 classes from AVHRR global land cover):
+    AVHRR_LAND_COVER (use with AVHRR_LAND_COVER_LABELS)
 
 Diverging palettes (ordered, two-sided):
     SUNSET, NIGHTFALL, BURD, PRGN
@@ -111,6 +115,45 @@ DARK = (
     "#666633",  # dark yellow
     "#663333",  # dark red
     "#555555",  # dark grey
+)
+
+# -----------------------------------------------------------------------------
+# AVHRR Global Land Cover Classification (Tol Fig. 27)
+# -----------------------------------------------------------------------------
+
+# 14 categorical colours matched to the AVHRR-derived global land-cover classes.
+# Use as a ListedColormap with integer class labels 0..13.
+AVHRR_LAND_COVER = (
+    "#5566AA",  # 0  Water
+    "#117733",  # 1  Evergreen Needleleaf Forest
+    "#44AA66",  # 2  Evergreen Broadleaf Forest
+    "#55AA22",  # 3  Deciduous Needleleaf Forest
+    "#668822",  # 4  Deciduous Broadleaf Forest
+    "#99BB55",  # 5  Mixed Forest
+    "#558877",  # 6  Woodland
+    "#88BBAA",  # 7  Wooded Grasslands / Shrubs
+    "#AADDCC",  # 8  Closed Bushlands or Shrublands
+    "#44AA88",  # 9  Open Shrublands
+    "#DDCC66",  # 10 Grasses
+    "#FFDD44",  # 11 Croplands
+    "#FFEE88",  # 12 Bare
+    "#BB0011",  # 13 Urban and Built
+)
+AVHRR_LAND_COVER_LABELS = (
+    "Water",
+    "Evergreen Needleleaf Forest",
+    "Evergreen Broadleaf Forest",
+    "Deciduous Needleleaf Forest",
+    "Deciduous Broadleaf Forest",
+    "Mixed Forest",
+    "Woodland",
+    "Wooded Grasslands / Shrubs",
+    "Closed Bushlands or Shrublands",
+    "Open Shrublands",
+    "Grasses",
+    "Croplands",
+    "Bare",
+    "Urban and Built",
 )
 
 # -----------------------------------------------------------------------------
@@ -263,6 +306,7 @@ PALETTES: dict[str, tuple[str, ...]] = {
     "light": LIGHT,
     "pale": PALE,
     "dark": DARK,
+    "avhrr_land_cover": AVHRR_LAND_COVER,
     "sunset": SUNSET,
     "nightfall": NIGHTFALL,
     "burd": BURD,
@@ -301,7 +345,8 @@ def get_cmap(name: str, n: int | None = None):
 
     key = name.lower()
     qualitative = {"bright", "high_contrast", "vibrant", "muted",
-                   "medium_contrast", "light", "pale", "dark"}
+                   "medium_contrast", "light", "pale", "dark",
+                   "avhrr_land_cover"}
 
     if key == "smooth_rainbow":
         colors = smooth_rainbow(n if n is not None else 256)
@@ -325,6 +370,7 @@ def get_cmap(name: str, n: int | None = None):
 __all__ = [
     "BRIGHT", "HIGH_CONTRAST", "VIBRANT", "MUTED", "MEDIUM_CONTRAST",
     "LIGHT", "PALE", "DARK",
+    "AVHRR_LAND_COVER", "AVHRR_LAND_COVER_LABELS",
     "SUNSET", "NIGHTFALL", "BURD", "PRGN",
     "YLORBR", "IRIDESCENT", "INCANDESCENT",
     "RAINBOW_DISCRETE", "RAINBOW_DISCRETE_SUBSETS",

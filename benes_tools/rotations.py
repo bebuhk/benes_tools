@@ -1,0 +1,165 @@
+"""
+bene, 2026-06-03
+orientations.py — uniform SO(3) sampling via Super-Fibonacci spirals.
+
+Reference
+---------
+Alexa, M. (2022). "Super-Fibonacci Spirals: Fast, Low-Discrepancy
+Sampling of SO(3)." CVPR 2022, pp. 8291-8300. (Algorithm 1.)
+
+Pipeline:  super_fibonacci(n) -> (n,4) quaternions
+           quats_to_matrices(q) -> (n,3,3) rotation matrices  [JAX, jit/vmap]
+Validation against scipy.spatial.transform.Rotation.
+
+Quaternion convention used throughout this module: SCALAR-FIRST, i.e.
+q = (w, x, y, z) with w = cos(theta/2). scipy uses scalar-LAST (x,y,z,w),
+so we reorder explicitly at the scipy boundary -- never implicitly.
+"""
+
+########################################################################
+# Fibonacci rotations
+########################################################################
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+# Production runs use float32 (fast, GPU-friendly). Validation wants real
+# float64 to verify the math rather than float32 round-off; callers that
+# need x64 must set this BEFORE the first jax computation:
+#     jax.config.update("jax_enable_x64", True)
+
+
+# Paper's recommended constants (Eq. 10-11): phi^2 = 2, psi^4 = psi + 4.
+_PHI = np.sqrt(2.0)
+_PSI = 1.533751168755204288118041  # positive real root of psi^4 - psi - 4
+
+
+### bene 2026-06-03: sampling SO(3) efficiently -> perfect of cDFT (and GCMC, not sure if they use the same alg though)
+def super_fibonacci(n: int, dtype=jnp.float32) -> jnp.ndarray:
+    """Generate n low-discrepancy orientations on SO(3) as unit quaternions.
+    implemented after Alexa, 2022, Super-Fibonacci Spirals: Fast, Low-Discrepancy Sampling of SO(3).
+    see also: https://marcalexa.github.io/superfibonacci/
+
+    Returns
+    -------
+    (n, 4) array, scalar-FIRST (w, x, y, z), each row a unit quaternion.
+
+    Notes
+    -----
+    Direct vectorisation of Algorithm 1. The paper writes the quaternion
+    as (r sin a, r cos a, R sin b, R cos b); we place that 4-vector into
+    scalar-first slots consistently (the labelling is arbitrary as long as
+    the matrix conversion below matches it -- the validation test enforces
+    this).
+    """
+    i = jnp.arange(n, dtype=jnp.float64 if dtype == jnp.float64 else jnp.float32)
+    s = i + 0.5
+    t = s / n
+    d = 2.0 * jnp.pi * s
+    r = jnp.sqrt(t)
+    R = jnp.sqrt(1.0 - t)
+    alpha = d / _PHI
+    beta = d / _PSI
+    q = jnp.stack(
+        [r * jnp.sin(alpha),   # w
+         r * jnp.cos(alpha),   # x
+         R * jnp.sin(beta),    # y
+         R * jnp.cos(beta)],   # z
+        axis=-1,
+    )
+    return q.astype(dtype)
+
+
+### bene 2026-06-03: compute the len(q) rotation matrices (3x3) "instantly". one per quaternion/orientation.
+@jax.jit
+def quats_to_matrices(q: jnp.ndarray) -> jnp.ndarray:
+    """Convert scalar-first unit quaternions (..., 4) to matrices (..., 3, 3).
+
+    Standard quaternion->rotation formula for q = (w, x, y, z). Assumes the
+    inputs are already normalised (Algorithm 1 produces unit quaternions),
+    but renormalises defensively to absorb float error.
+    """
+    q = q / jnp.linalg.norm(q, axis=-1, keepdims=True)
+    w, x, y, z = q[..., 0], q[..., 1], q[..., 2], q[..., 3]
+
+    # rows of the rotation matrix
+    r00 = 1 - 2 * (y * y + z * z)
+    r01 = 2 * (x * y - z * w)
+    r02 = 2 * (x * z + y * w)
+    r10 = 2 * (x * y + z * w)
+    r11 = 1 - 2 * (x * x + z * z)
+    r12 = 2 * (y * z - x * w)
+    r20 = 2 * (x * z - y * w)
+    r21 = 2 * (y * z + x * w)
+    r22 = 1 - 2 * (x * x + y * y)
+
+    R = jnp.stack(
+        [jnp.stack([r00, r01, r02], axis=-1),
+         jnp.stack([r10, r11, r12], axis=-1),
+         jnp.stack([r20, r21, r22], axis=-1)],
+        axis=-2,
+    )
+    return R
+
+########################################################################
+# Euler rotations
+########################################################################
+### bene 2026-06-03: this is mostly to validate. from a rotation matrix, one can go back to Euler angles (phi, theta, psi; zyz convention) via a closed-form formula.
+
+def matrix_to_euler_zyz(R, degrees=False) -> tuple[float, float, float]:
+    """Recover (phi, theta, psi) from a z-y-z rotation matrix.
+
+    Inverse of euler_zyz(phi, theta, psi) = Rz(phi) @ Ry(theta) @ Rz(psi).
+    theta in [0, pi]; phi, psi in (-pi, pi].
+    """
+    theta = jnp.arccos(jnp.clip(R[2, 2], -1.0, 1.0))
+    phi   = jnp.arctan2(R[1, 2],  R[0, 2])
+    psi   = jnp.arctan2(R[2, 1], -R[2, 0])
+
+    # watch out for degeneracy at gimbal lock (theta=0 or 180 degrees), where phi and psi are not uniquely defined (only phi+psi is defined -> infenitely many solutions). We choose to set psi=0 in that case, and let phi absorb the full rotation.
+    if degrees:
+        phi = jnp.degrees(phi)
+        theta = jnp.degrees(theta)
+        psi = jnp.degrees(psi)
+    return phi, theta, psi
+
+
+def Rz(a, degrees=False):
+    if degrees:
+        a = jnp.radians(a)
+    c, s = jnp.cos(a), jnp.sin(a)
+    return jnp.array([  [ c,    -s,     0.],
+                        [ s,    c,      0.],
+                        [ 0.,   0.,     1.]])
+
+def Ry(a, degrees=False):
+    if degrees:
+        a = jnp.radians(a)
+    c, s = jnp.cos(a), jnp.sin(a)
+    return jnp.array([  [ c,    0.,     s],
+                        [ 0.,   1.,     0.],
+                        [-s,    0.,     c]])
+
+def euler_zyz(phi, theta, psi, degrees=False):
+    """Orientation matrix, z-y-z convention
+    R = Rz(phi) @ Ry(theta) @ Rz(psi)
+
+    INPUTS:
+    phi : float
+        angle about the original z axis (0 to 2*pi)
+    theta : float
+        angle about the intermediate y axis (0 to pi)
+    psi : float
+        angle about the final z axis (0 to 2*pi)
+
+    OUTPUT:
+    R : (3,3) array
+        rotation matrix corresponding to the given Euler angles.
+    """
+    if degrees:
+        phi = jnp.radians(phi)
+        theta = jnp.radians(theta)
+        psi = jnp.radians(psi)
+    return Rz(phi) @ Ry(theta) @ Rz(psi) # first rotate around psi (z axis), then theta (y axis), then phi (z axis). (order matters. gimbal lock can occur (if theta=0 or 180 degrees))
+
