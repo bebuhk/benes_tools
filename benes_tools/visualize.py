@@ -122,6 +122,8 @@ def visualize_molecule(
     save_path: str | None = None,  
     cubic_frame: float | None = 3.0,
     fixed_camera: bool = True,
+    positions = None,
+    title = "",
 ) -> go.Figure:
     """Build an interactive 3D Plotly figure of `mol`.
 
@@ -167,8 +169,15 @@ def visualize_molecule(
     fixed_camera : bool
         If True, set a fixed camera position for a more informative default view (side-on,
         with axes labels visible). If False, use Plotly's default auto-rotating camera.)
+    positions : array-like or None
+        Optional override for the site positions; if None, uses mol.positions.
+    title : str
+        Optional title prefix to appear before the molecule name in the figure title.
     """
-    pos = np.asarray(mol.positions)
+    if positions is not None:
+        pos = np.asarray(positions)
+    else:
+        pos = np.asarray(mol.positions)
     sigma = np.asarray(mol.sigma)
     epsilon = np.asarray(mol.epsilon)
     charge = np.asarray(mol.charge)
@@ -280,7 +289,7 @@ def visualize_molecule(
         )
 
     fig = go.Figure(data=traces)
-    lines = [f"<b>{mol.name}</b> ({mol.force_field})"]
+    lines = [title + f"<b>{mol.name}</b> ({mol.force_field})"]
     for i in range(mol.n_segments):
         s = _fmt(sigma[i]) if m_lj[i] else "null"
         e = _fmt(epsilon[i]) if m_lj[i] else "null"

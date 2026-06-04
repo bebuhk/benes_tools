@@ -4,11 +4,12 @@ import numpy as np
 import pandas as pd
 import warnings
 
-def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False):
+def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False, return_species=False):
     """Read a CIF file and return lattice, angles, charges, fractional atom coords,
     UFF sigma/epsilon per atom, and total unit-cell mass."""
     cif_parser = CifParser(path2cif, occupancy_tolerance=100)
-    structure   = cif_parser.get_structures(primitive=False)[0]
+    #structure   = cif_parser.get_structures(primitive=False)[0]
+    structure   = cif_parser.parse_structures(primitive=False)[0] # parse_structures() is equivalent to get_structures(primitive=False)
 
     a = structure.lattice.a
     b = structure.lattice.b
@@ -34,6 +35,7 @@ def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False):
     n_atoms    = structure.num_sites
     sigmas   = np.zeros(n_atoms)
     epsilons = np.zeros(n_atoms)
+    atom_types = []
     mass_kg  = 0.0
 
     for i, site in enumerate(structure):
@@ -42,10 +44,12 @@ def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False):
             sigmas[i]   = float(forcefield['sigma'][idx].iloc[0])
             epsilons[i] = float(forcefield['epsilon'][idx].iloc[0])
             mass_kg    += float(forcefield['mass'][idx].iloc[0]) * mass_atom
+            atom_types.append(site.species_string)
         else:
             species, occ = site.species_string.split(':')
             occ = float(occ)
             idx = forcefield['type'] == species
+            atom_types.append(species)
             sigmas[i]   = float(forcefield['sigma'][idx].iloc[0])
             epsilons[i] = float(forcefield['epsilon'][idx].iloc[0]) * occ
             mass_kg    += float(forcefield['mass'][idx].iloc[0]) * mass_atom * occ
@@ -63,16 +67,23 @@ def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False):
             warnings.warn(f'Charge field not found in CIF ({e}). Setting to NaN.')
             charges = np.full(len(atoms_abc), np.nan)
 
-    if not np.isnan(charges).any() and abs(np.sum(charges)) > 1e-6:
-        warnings.warn(f'Sum of framework charges is not zero: {np.sum(charges):.4f} e')
+    if not np.isnan(charges).any() and abs(np.sum(charges)) > 1e-8:
+        warnings.warn(f'Sum of framework charges is not zero: {np.sum(charges):.8f} e')
+    
+    volume_unit_cell = np.abs(np.dot(lattice[0], np.cross(lattice[1], lattice[2])))
 
     if verbose:
         print(f'lattice (rows = a1,a2,a3):\n{lattice}')
-        print(f'n_atoms: {n_atoms}')
-        print(f'max/min charge: {np.max(charges):.3f} / {np.min(charges):.3f} e')
-        print(f'unit-cell volume: {np.abs(np.dot(lattice[0], np.cross(lattice[1], lattice[2]))):.3f} Å³')
+        print(f'n_atoms: {n_atoms} (types: {set(atom_types)})')
+        print(f'max and min charge: {np.max(charges):.3f} and {np.min(charges):.3f} e (atoms: {atom_types[np.argmax(charges)]} and {atom_types[np.argmin(charges)]})')
+        print(f'unit-cell volume: {volume_unit_cell:.3f} Å³')
+        print(f'unit-cell mass: {mass_kg:.3e} kg (-> density: {mass_kg / volume_unit_cell*1e27:.3f} t/m3 = kg/L)')
+        #print(f'force field: {path2ff.split("/")[-1]} (sigmas = {set(sigmas)}, epsilons = {set(epsilons)})')
 
-    return lattice, angles, charges, atoms_abc, sigmas, epsilons, mass_kg
+    if return_species:
+        return lattice, angles, charges, atoms_abc, sigmas, epsilons, mass_kg, atom_types
+    else:
+        return lattice, angles, charges, atoms_abc, sigmas, epsilons, mass_kg
 
 
 # # ── Run ───────────────────────────────────────────────────────────────────────

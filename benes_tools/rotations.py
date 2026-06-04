@@ -102,27 +102,111 @@ def quats_to_matrices(q: jnp.ndarray) -> jnp.ndarray:
     )
     return R
 
+
+##### for validation: get quaternions from euler angles:
+def quat_mul(a, b):
+    """Hamilton product, scalar-first (w,x,y,z)."""
+    aw, ax, ay, az = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+    bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
+    return jnp.stack([
+        aw*bw - ax*bx - ay*by - az*bz,
+        aw*bx + ax*bw + ay*bz - az*by,
+        aw*by - ax*bz + ay*bw + az*bx,
+        aw*bz + ax*by - ay*bx + az*bw,
+    ], axis=-1)
+
+def _quat_axis(angle, axis):
+    """Unit quaternion for rotation `angle` about a principal axis (0=x,1=y,2=z)."""
+    h = angle / 2.0
+    w, s = jnp.cos(h), jnp.sin(h)
+    vec = [0., 0., 0.]
+    q = jnp.array([w, 0., 0., 0.]).at[axis + 1].set(s)
+    return q
+
+def euler_zyz_to_quat(phi, theta, psi):
+    """(phi, theta, psi) z-y-z  ->  scalar-first unit quaternion."""
+    qz1 = _quat_axis(phi,   2)   # Rz(phi)
+    qy  = _quat_axis(theta, 1)   # Ry(theta)
+    qz2 = _quat_axis(psi,   2)   # Rz(psi)
+    return quat_mul(quat_mul(qz1, qy), qz2)
+####
+
+
 ########################################################################
 # Euler rotations
 ########################################################################
 ### bene 2026-06-03: this is mostly to validate. from a rotation matrix, one can go back to Euler angles (phi, theta, psi; zyz convention) via a closed-form formula.
 
-def matrix_to_euler_zyz(R, degrees=False) -> tuple[float, float, float]:
-    """Recover (phi, theta, psi) from a z-y-z rotation matrix.
+# def matrix_to_euler_zyz(R, degrees=False) -> tuple[float, float, float]:
+#     """Recover (phi, theta, psi) from a z-y-z rotation matrix.
+
+#     Inverse of euler_zyz(phi, theta, psi) = Rz(phi) @ Ry(theta) @ Rz(psi).
+#     theta in [0, pi]; phi, psi in (-pi, pi].
+#     """
+#     theta = jnp.arccos(jnp.clip(R[2, 2], -1.0, 1.0))
+#     phi   = jnp.arctan2(R[1, 2],  R[0, 2])
+#     psi   = jnp.arctan2(R[2, 1], -R[2, 0])
+
+#     # watch out for degeneracy at gimbal lock (theta=0 or 180 degrees), where phi and psi are not uniquely defined (only phi+psi is defined -> infenitely many solutions). We choose to set psi=0 in that case, and let phi absorb the full rotation.
+#     if degrees:
+#         phi = jnp.degrees(phi)
+#         theta = jnp.degrees(theta)
+#         psi = jnp.degrees(psi)
+#     return phi, theta, psi
+
+# import jax.numpy as jnp
+
+# this can handle a stack of n rotation matrices (R shape (n, 3, 3)) 
+def matrix_to_euler_zyz(R, degrees=False):
+    """Recover (phi, theta, psi) from z-y-z rotation matrices.
 
     Inverse of euler_zyz(phi, theta, psi) = Rz(phi) @ Ry(theta) @ Rz(psi).
-    theta in [0, pi]; phi, psi in (-pi, pi].
-    """
-    theta = jnp.arccos(jnp.clip(R[2, 2], -1.0, 1.0))
-    phi   = jnp.arctan2(R[1, 2],  R[0, 2])
-    psi   = jnp.arctan2(R[2, 1], -R[2, 0])
+    Accepts a single (3, 3) matrix or a batch (..., 3, 3).
 
-    # watch out for degeneracy at gimbal lock (theta=0 or 180 degrees), where phi and psi are not uniquely defined (only phi+psi is defined -> infenitely many solutions). We choose to set psi=0 in that case, and let phi absorb the full rotation.
+    Returns
+    -------
+    If R is (3, 3): a tuple (phi, theta, psi) of scalars.
+    If R is (..., 3, 3): an array of shape (..., 3) with columns
+        [phi, theta, psi].
+    theta in [0, pi]; phi, psi in (-pi, pi].
+
+    At gimbal lock (theta = 0 or pi) only phi + psi is defined; we set
+    psi = 0 and let phi absorb the full z-rotation.
+    """
+    R = jnp.asarray(R)
+    single = (R.ndim == 2)
+
+    theta = jnp.arccos(jnp.clip(R[..., 2, 2], -1.0, 1.0))
+
+    # generic (non-degenerate) extraction
+    phi = jnp.arctan2(R[..., 1, 2],  R[..., 0, 2])
+    psi = jnp.arctan2(R[..., 2, 1], -R[..., 2, 0])
+
+    # --- gimbal-lock handling ---------------------------------------
+    # Near theta=0: R = Rz(phi+psi); near theta=pi: R = Rz(phi-psi).
+    # The off-axis entries used above vanish, so arctan2(0,0) is junk.
+    # Resolve from the top-left 2x2 block and assign everything to phi.
+    eps = 1e-7
+    near0  = jnp.abs(R[..., 2, 2] - 1.0) < eps     # theta ~ 0
+    nearpi = jnp.abs(R[..., 2, 2] + 1.0) < eps     # theta ~ pi
+    locked = near0 | nearpi
+
+    # phi + psi (theta~0) or phi - psi (theta~pi) live in the 2x2 block
+    phi_lock = jnp.where(
+        near0,
+        jnp.arctan2(R[..., 1, 0], R[..., 0, 0]),   # phi+psi, sum -> phi
+        jnp.arctan2(-R[..., 0, 1], R[..., 0, 0]),  # phi-psi, diff -> phi
+    )
+
+    phi = jnp.where(locked, phi_lock, phi)
+    psi = jnp.where(locked, 0.0, psi)              # psi absorbed into phi
+
     if degrees:
-        phi = jnp.degrees(phi)
-        theta = jnp.degrees(theta)
-        psi = jnp.degrees(psi)
-    return phi, theta, psi
+        phi, theta, psi = jnp.degrees(phi), jnp.degrees(theta), jnp.degrees(psi)
+
+    if single:
+        return phi, theta, psi                     # tuple of scalars, as before
+    return jnp.stack([phi, theta, psi], axis=-1)   # (..., 3)
 
 
 def Rz(a, degrees=False):
