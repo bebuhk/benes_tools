@@ -17,20 +17,9 @@ factor_coulomb = (
     1 / (4 * np.pi * eps0) * si.QE**2 / si.KB / si.KELVIN / si.ANGSTROM
 )  # convert from e**2/Å units to K (-> K/molecule)
 
-from vesin.torch import (
-    NeighborList,
-)  # install with "pip install vesin-torch" not "pip install vesin[torch]" as indicated on https://luthaf.fr/vesin/latest/index.html
-
 import numpy as np
-import torch
-
-device = "cpu"
-dtype = torch.float64
 
 from scipy import special
-
-from ext_pot.get_cif_specific_info import compute_num_images
-
 
 def ewald_lr_grid(lattice, charges, atoms_abc, grid_xyz, N, alpha: float = 0.341429):
     """the long-range part of the Ewald sum
@@ -465,6 +454,66 @@ def get_inf_mask_poreblocking(lattice, grid_xyz, path2block, verbose=False):
             f"total blocked volume: {n_blocked_gridpoints * volume_unit_cell_angstrom3 / n_gridpoints} (Å^3) (n_blocked_gridpoints * volume_unit_cell_angstrom3 / n_gridpoints)"
         )
     return inf_mask, block_spheres_volume_angstrom3_list
+
+
+def compute_num_images(lattice, cutoff):
+    """_computes the number of images in each direction that is necessary to have the cutoff smaller than the half of distances between faces_"""
+    # This function computes the number of images in each direction that is
+    # necessary to have the cutoff smaller than the half of distances
+    # between faces.
+    ws = np.zeros([lattice.shape[0]])
+    rep = np.zeros([lattice.shape[0]], dtype=int)
+    rep_lat = np.zeros(lattice.shape)
+    for i in range(lattice.shape[0]):  # for each direction (a, b, c)
+        # Compute the interplanar distance in direction `i`
+        cross_prod = np.cross(
+            lattice[(i + 1) % 3], lattice[(i + 2) % 3]
+        )  # perpendicular onto the other 2 unitvectors
+        ws[i] = np.linalg.norm(np.dot(lattice[i], cross_prod)) / np.linalg.norm(
+            cross_prod
+        )  # the distance between the 2 faces in direction i
+        # Determine the number of repetitions needed in direction `i`
+        rep[i] = np.ceil(2 * cutoff / ws[i])
+        rep_lat[i] = rep[i] * lattice[i]
+    # rep_lat_inv = np.linalg.inv(rep_lat)
+    return rep, rep_lat
+
+
+
+## bene 8.6.26: get the FEA (free-energy-average function) and the canonical average function (to be avoided but used by vincent)
+def FEA_Abraham(E_sum_K_na, temperature_K = 298.15):
+    """Free-energy average (aka "Boltzmann-averaged" effective interaction) as in Abraham et al. (and Forte2014effective and EllerGross2021FEA)
+    INPUT:
+        E_sum_K_na: array of shape (Nw)
+        temperature_K: float
+    OUTPUT:
+        Ew_Abraham: float
+    """
+
+    Ew_Abraham = -temperature_K * np.log((np.sum(np.exp(-E_sum_K_na / temperature_K), axis=0))/len(E_sum_K_na))
+    return Ew_Abraham
+
+def FEA_Abraham_ns(E_sum_K_na, temperature_K=298.15, orientation_sampling_axis=0):
+    """numerically stableFree-energy average (aka "Boltzmann-averaged" effective interaction) as in Abraham et al. (and Forte2014effective and EllerGross2021FEA), with numerical stability shift.
+        INPUT:
+        E_sum_K_na: array of shape (Nw)
+        temperature_K: float
+        orientation_sampling_axis: int (axis along which orientations are sampled, typically 0)
+    OUTPUT:
+        Ew_Abraham: float
+    """
+    N = len(E_sum_K_na)
+    E0 = np.min(E_sum_K_na, axis=0)            # shift for stability
+    z = np.sum(np.exp(-(E_sum_K_na - E0) / temperature_K), axis=orientation_sampling_axis) / N
+    return E0 - temperature_K * np.log(z)
+
+# Boltzmann-weighted mean over orientations
+def canonical_average(energies_K_na, temperature_K = 298.15):
+    """canonical average (aka Boltzmann-weighted average) energy over orientations, given energies in K. (as computed in vincents 3d_paper-dft, misleadingly called Boltzmann average in the SI)"""
+    w = np.exp(-energies_K_na / temperature_K)
+    Z = np.sum(w, axis=0)
+    Ew = np.sum(energies_K_na * w, axis=0) / Z
+    return Ew, w
 
 
 def main():

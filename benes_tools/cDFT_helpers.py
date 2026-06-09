@@ -86,26 +86,67 @@ def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False, r
         return lattice, angles, charges, atoms_abc, sigmas, epsilons, mass_kg
 
 
+
 # # ── Run ───────────────────────────────────────────────────────────────────────
 # lattice, angles, charges, atoms_abc, sigmas_atoms, epsilons_atoms, mass_kg = read_cif(
 #     cif_path, path2ff=framework_ff, verbose=True
 # )
 
-def get_grid(lattice, grid_points_per_angstrom=2, ceil2power2_bool=False, all3highest_n_bool=False):
-    """Build a 3-D grid of xyz coordinates (cell-centred).
-    Returns grid_xyz of shape (Na, Nb, Nc, 3) and n_grid = [Na, Nb, Nc]."""
+def get_grid(
+    lattice,
+    grid_points_per_angstrom=2,
+    ceil2power2_bool=False,
+    all3highest_n_bool=False,
+):
+    """_Creates a grid of xyz coordinates for gridpoints (per unitcell vector direction) evenly spaced in a given lattice._
 
-    # L is length of each lattice vector (rows of lattice).
-    n_grid = [int(L * grid_points_per_angstrom) for L in np.linalg.norm(lattice, axis=1)]
+    :param lattice: _ The lattice vectors in xyz coordinates._
+    :type lattice: _np.ndarray_
+    :param grid_points_per_angstrom: _The number of grid points per angstrom._, defaults to 2
+    :type grid_points_per_angstrom: int, optional
+    :param ceil_to_power_of_two: _If True, the grid size is rounded up to the next higher exponent of 2. Defaults to False. This
+            can be useful as the FFT algorithm is most efficient for grid sizes that are a power of 2, so the additional grid points are calculated
+            without (much) additional computational cost._, defaults to False
+    :type ceil_to_power_of_two: bool, optional
+    :param all3highest_n_bool: _take the highest of the three n_grids based on the per angstrom (and ceiling) for all three directions_, defaults to False
+    :type all3highest_n_bool: bool, optional
+    :return: _tuple[grid_xyz: np.ndarray: The grid of xyz coordinates.
+        n_grid: list[int]]: The grid size (i.e. the # of grid points) in abc directions. its the same as "list(grid_xyz.shape[0:3])" and outputed here only for conveience._
+    :rtype: _type_
+    """
+    # non orthogonal case ## chat Copilot code
+
+    # get grid size (in abc directions) (2 per angstrom)
+    n_grid = [
+        int(L * grid_points_per_angstrom) for L in np.linalg.norm(lattice, axis=1)
+    ]  # i.e. L in [a,b,c], int always rounds down
+
+    # round up to the next higher exponent of 2
     if ceil2power2_bool:
-        n_grid = [int(2 ** np.ceil(np.log2(n))) for n in n_grid]
+        n_grid = [int(2 ** np.ceil(np.log2(n_grid_i))) for n_grid_i in n_grid]
+
     if all3highest_n_bool:
         n_grid = [max(n_grid)] * 3
-    i, j, k = np.indices(n_grid)
-    grid_xyz = (
-        i[..., np.newaxis] / n_grid[0] * lattice[0] + lattice[0] / (2 * n_grid[0])
-      + j[..., np.newaxis] / n_grid[1] * lattice[1] + lattice[1] / (2 * n_grid[1])
-      + k[..., np.newaxis] / n_grid[2] * lattice[2] + lattice[2] / (2 * n_grid[2])
+
+    # n_grid = [33, 33, 33]  # for testing
+
+    # Create a grid of indices
+    i, j, k = np.indices(
+        n_grid
+    )  # blocks, rows, columns [r,c,b] #i,j,k have shape (n_grid[0], n_grid[1], n_grid[2])
+
+    # Calculate the grid points using broadcasting
+    grid_xyz = (  # in xyz coordinates
+        # np.newaxis creates a new dimension of size 1 -> shape = (n_grid[0], n_grid[1], n_grid[2], 1)
+        # which is multiplied with some value in the shape of lattice[x] (shape = (3,))
+        # -> the result is a shape of (n_grid[0], n_grid[1], n_grid[2], 3)
+        i[..., np.newaxis] / n_grid[0] * lattice[0]
+        + lattice[0] / (2 * n_grid[0])  # i is a part of the gridpoint
+        + j[..., np.newaxis] / n_grid[1] * lattice[1]
+        + lattice[1] / (2 * n_grid[1])  # j is b part of the gridpoint
+        + k[..., np.newaxis] / n_grid[2] * lattice[2]
+        + lattice[2] / (2 * n_grid[2])  # k is c part of the gridpoint
+        # k * step + step/2 (where step = lattice[2]/n_grid[2] = c/#gridpoints_c_direction)
     )
     return grid_xyz, n_grid
 
@@ -129,11 +170,9 @@ def reciprocal_lattice(cell):
 
 
 
-
-
 ###########################################################################################################
 # Ewald parameter estimation (from Claude, aligned with Frenkel&Smit i think)
-def estimate_parameters(charges, cell, eps_total=1e-8, r_cut=None, alpha=None):
+def estimate_ewald_parameters(charges, cell, eps_total=1e-8, r_cut=None, alpha=None):
     """Estimate (alpha, r_cut, k_cut) for a target total accuracy.
 
     Mirrors the reference implementation's logic:
