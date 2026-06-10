@@ -23,6 +23,7 @@ so we reorder explicitly at the scipy boundary -- never implicitly.
 import jax
 import jax.numpy as jnp
 import numpy as np
+import itertools
 
 # Production runs use float32 (fast, GPU-friendly). Validation wants real
 # float64 to verify the math rather than float32 round-off; callers that
@@ -247,3 +248,24 @@ def euler_zyz(phi, theta, psi, degrees=False):
         psi = jnp.radians(psi)
     return Rz(phi) @ Ry(theta) @ Rz(psi) # first rotate around psi (z axis), then theta (y axis), then phi (z axis). (order matters. gimbal lock can occur (if theta=0 or 180 degrees))
 
+
+
+####### bene 9.6.26: vincents angles
+def get_naive_angles(angle_step=20):
+    """naive equidistant sampling of angles phi and theta. this oversamples poles, not uniform on the sphere. not good for cDFT.
+    code is copied from vincents 3d_paper-dft repo.
+
+    INPUT:
+    angle_step: float (in degrees) step size for phi and theta angles. smaller step -> more angles -> more accurate but slower cDFT.
+
+    OUTPUT:
+    all_angles: list of tuples (phi, theta) in degrees. phi in range 0 to 360, theta in range 0 to 180. (theta is the polar angle, phi is the azimuthal angle)
+    """
+    theta_angles = np.arange(angle_step, 360, angle_step) # comment bene: would be better to go with standart convention for spherical coordinates: i.e. theta in range 0 to pi, phi in range 0 to 2pi. (otherwise jacobian switches sign..)
+    phi_angles = np.arange(0, 180, angle_step)
+    #num_config_angles = theta_angles.shape[0]*phi_angles.shape[0] + 1
+    #grid_1d = self.framework.grid.reshape((-1, 3)) # grid has shape (n_x, n_y, n_z, 3). grid_1d has shape (n_x*n_y*n_z=#gp, 3) (one row for every grid point. each row: x, y, z coordinate)
+    all_angles = list(itertools.product(theta_angles, phi_angles)) 
+    all_angles.append((0, 0)) ## bene: one could add (360,0) as well (still missing)
+
+    return all_angles

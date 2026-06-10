@@ -188,6 +188,60 @@ def calc_C_sr_ExtPot(
                     )  ## Bene 14.01.2025: verified. this is the correct coulomb interaction calculation in [K/molecule]
     return coulomb_sr  # , periodic_coordinates, periodic_charges
 
+## bene 9.6.26: added the center_grid version from /Users/bene/Code/V_ext/__external_potential_vinc_improved_claude_ewald.ipynb
+def calc_C_sr_ExtPot_c(coords_abc, lattice, grid_xyz, charges, rcut=12.0, alpha=0.341429, inf_mask=None, damping=True, center_grid=None):
+    """Short-range Ewald contribution at every grid point.
+    Returns V_sr [K/e] with shape grid_xyz.shape[:3].
+    Grid points where inf_mask is True are skipped and set to +inf.
+    the point charges around a cutoff sphere with radius rcut around center_grid (if provided) are considered (otherwise around grid_xyz).
+    """
+    coords_xyz   = coords_abc @ lattice
+    rep, rep_lat, _ = compute_num_images(lattice, rcut, return_inv=True)
+    n_atoms      = len(coords_abc)
+    n_rep        = rep[0] * rep[1] * rep[2]
+
+    periodic_coords  = np.zeros((n_atoms * n_rep, 3))
+    periodic_charges = np.zeros(n_atoms * n_rep)
+    count = 0
+    for ii in range(rep[0]):
+        for jj in range(rep[1]):
+            for kk in range(rep[2]):
+                for a in range(n_atoms):
+                    periodic_coords[count]  = coords_xyz[a] + ii*lattice[0] + jj*lattice[1] + kk*lattice[2]
+                    periodic_charges[count] = charges[a]
+                    count += 1
+
+    rep_lat_inv = np.linalg.inv(rep_lat)
+    coulomb_sr  = np.zeros(grid_xyz.shape[:3])
+    if inf_mask is not None:
+        coulomb_sr[inf_mask] = np.inf
+
+    for i in range(grid_xyz.shape[0]):
+        for j in range(grid_xyz.shape[1]):
+            for k in range(grid_xyz.shape[2]):
+                if coulomb_sr[i, j, k] == np.inf:
+                    continue
+                d = (periodic_coords - grid_xyz[i, j, k]) @ rep_lat_inv
+                d = (d - np.rint(d)) @ rep_lat      # minimum-image
+                d = np.linalg.norm(d, axis=-1)
+                within = d < rcut
+
+                if center_grid is not None:
+                    d2 = (periodic_coords - center_grid[i, j, k]) @ rep_lat_inv
+                    d2 = (d2 - np.rint(d2)) @ rep_lat      # minimum-image
+                    d2 = np.linalg.norm(d2, axis=-1)
+                    within = d2 < rcut
+                    
+                if damping:
+                    coulomb_sr[i, j, k] = factor_coulomb * np.sum(
+                        periodic_charges[within] * special.erfc(alpha * d[within]) / d[within]
+                    )
+                else:
+                    coulomb_sr[i, j, k] = factor_coulomb * np.sum(
+                        periodic_charges[within] / d[within]
+                    )
+
+    return coulomb_sr
 
 def calc_LJ(
     coords_abc,
@@ -456,7 +510,7 @@ def get_inf_mask_poreblocking(lattice, grid_xyz, path2block, verbose=False):
     return inf_mask, block_spheres_volume_angstrom3_list
 
 
-def compute_num_images(lattice, cutoff):
+def compute_num_images(lattice, cutoff, return_inv=False):
     """_computes the number of images in each direction that is necessary to have the cutoff smaller than the half of distances between faces_"""
     # This function computes the number of images in each direction that is
     # necessary to have the cutoff smaller than the half of distances
@@ -476,6 +530,9 @@ def compute_num_images(lattice, cutoff):
         rep[i] = np.ceil(2 * cutoff / ws[i])
         rep_lat[i] = rep[i] * lattice[i]
     # rep_lat_inv = np.linalg.inv(rep_lat)
+    if return_inv:
+        rep_lat_inv = np.linalg.inv(rep_lat)
+        return rep, rep_lat, rep_lat_inv
     return rep, rep_lat
 
 
