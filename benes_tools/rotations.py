@@ -251,15 +251,16 @@ def euler_zyz(phi, theta, psi, degrees=False):
 
 
 ####### bene 9.6.26: vincents angles
-def get_naive_angles(angle_step=20):
+def get_naive_angles(angle_step=20, swap_phi_theta=False):
     """naive equidistant sampling of angles phi and theta. this oversamples poles, not uniform on the sphere. not good for cDFT.
     code is copied from vincents 3d_paper-dft repo.
 
     INPUT:
     angle_step: float (in degrees) step size for phi and theta angles. smaller step -> more angles -> more accurate but slower cDFT.
-
+    swap_phi_theta: bool, if True, swap the roles of phi and theta (i.e. phi becomes polar angle and theta becomes azimuthal angle). This is to match the convention used in vincents code, which is against the standard convention for spherical coordinates and causes more double counting (all phi at theta=180° are redundant). (different results!)
     OUTPUT:
     all_angles: list of tuples (phi, theta) in degrees. phi in range 0 to 360, theta in range 0 to 180. (theta is the polar angle, phi is the azimuthal angle)
+    [in vincents code, angles are swapped [i.e. interpreted as (theta, phi)], which is against convention and causes more double counting(all phi at theta=180° are redundant)!(leads to different results!)]
     """
     theta_angles = np.arange(angle_step, 360, angle_step) # comment bene: would be better to go with standart convention for spherical coordinates: i.e. theta in range 0 to pi, phi in range 0 to 2pi. (otherwise jacobian switches sign..)
     phi_angles = np.arange(0, 180, angle_step)
@@ -267,5 +268,8 @@ def get_naive_angles(angle_step=20):
     #grid_1d = self.framework.grid.reshape((-1, 3)) # grid has shape (n_x, n_y, n_z, 3). grid_1d has shape (n_x*n_y*n_z=#gp, 3) (one row for every grid point. each row: x, y, z coordinate)
     all_angles = list(itertools.product(theta_angles, phi_angles)) 
     all_angles.append((0, 0)) ## bene: one could add (360,0) as well (still missing)
+
+    if swap_phi_theta:
+        all_angles = [(theta, phi) for phi, theta in all_angles]
 
     return all_angles

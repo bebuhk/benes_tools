@@ -254,6 +254,7 @@ def calc_LJ(
     rcut=12,
     tail_correction_bool=True,
     inf_mask=None,
+    center_grid=None,
 ) -> np.ndarray:
     """_calculates the LJ potential [K/molecule] on a grid_
 
@@ -332,9 +333,17 @@ def calc_LJ(
                     distances_LJ = np.linalg.norm(
                         distances_LJ, axis=-1
                     )  # distances to all the (unit-cell-)atoms in a distace of 70 Å or less
-                    below_threshold_LJ = np.where(distances_LJ < rcut)[
-                        0
-                    ]  # distances to all the (unit-cell-)atoms in a distace of 30 Å or less
+
+                    if center_grid is not None:
+                        d2 = (periodic_coordinates - center_grid[i, j, k]) @ np.linalg.inv(rep_lat)
+                        d2 = (d2 - np.rint(d2)) @ rep_lat      # minimum-image
+                        d2 = np.linalg.norm(d2, axis=-1)
+                        #within = d2 < rcut
+                        below_threshold_LJ = np.where(d2 < rcut)[0]  # distances to all the (unit-cell-)atoms in a distace of 30 Å or less
+                    else: 
+                        below_threshold_LJ = np.where(distances_LJ < rcut)[
+                            0
+                        ]  # distances to all the (unit-cell-)atoms in a distace of 30 Å or less
 
                     all_eps = periodic_epsilon_mix_LJ[below_threshold_LJ]
                     all_sig = periodic_sigma_mix_LJ[below_threshold_LJ]
@@ -541,7 +550,7 @@ def compute_num_images(lattice, cutoff, return_inv=False):
 def FEA_Abraham(E_sum_K_na, temperature_K = 298.15):
     """Free-energy average (aka "Boltzmann-averaged" effective interaction) as in Abraham et al. (and Forte2014effective and EllerGross2021FEA)
     INPUT:
-        E_sum_K_na: array of shape (Nw)
+        E_sum_K_na: array of shape (Nw), sum of LJ and coulomb contributions for each orientation (Nw is the number of orientations sampled and over which the average should be taken)
         temperature_K: float
     OUTPUT:
         Ew_Abraham: float
@@ -553,14 +562,15 @@ def FEA_Abraham(E_sum_K_na, temperature_K = 298.15):
 def FEA_Abraham_ns(E_sum_K_na, temperature_K=298.15, orientation_sampling_axis=0):
     """numerically stableFree-energy average (aka "Boltzmann-averaged" effective interaction) as in Abraham et al. (and Forte2014effective and EllerGross2021FEA), with numerical stability shift.
         INPUT:
-        E_sum_K_na: array of shape (Nw)
+        E_sum_K_na: array of shape (Nw), sum of LJ and coulomb contributions for each orientation (Nw is the number of orientations sampled and over which the average should be taken)
         temperature_K: float
         orientation_sampling_axis: int (axis along which orientations are sampled, typically 0)
     OUTPUT:
         Ew_Abraham: float
     """
     N = len(E_sum_K_na)
-    E0 = np.min(E_sum_K_na, axis=0)            # shift for stability
+    E0 = np.min(E_sum_K_na, axis=orientation_sampling_axis)            # shift for stability
+    #print(f"shift by E0 = {E0} K for numerical stability in FEA_Abraham_ns")
     z = np.sum(np.exp(-(E_sum_K_na - E0) / temperature_K), axis=orientation_sampling_axis) / N
     return E0 - temperature_K * np.log(z)
 

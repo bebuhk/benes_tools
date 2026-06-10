@@ -159,7 +159,7 @@ class Molecule:
             reference=meta.get("reference", ""),
             combining_rule=meta.get("combining_rule", "lorentz-berthelot"),
             labels=tuple(labels),
-            positions=jnp.asarray(pos, dtype=jnp.float32),
+            positions=jnp.asarray(pos, dtype=jnp.float32), 
             sigma=jnp.asarray(sig, dtype=jnp.float32),
             epsilon=jnp.asarray(eps, dtype=jnp.float32),
             charge=jnp.asarray(chg, dtype=jnp.float32),
