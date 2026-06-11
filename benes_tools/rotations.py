@@ -273,3 +273,30 @@ def get_naive_angles(angle_step=20, swap_phi_theta=False):
         all_angles = [(theta, phi) for phi, theta in all_angles]
 
     return all_angles
+
+
+# reverse compute an estimate for angle_step from the number of orientations (developed via polynomial fit in /Users/bene/Code/V_ext/__V_ext.ipynb)
+def estimate_angle_step_from_n_orientations(n_orientations_target, return_float=False):
+    """estimate the angle_step that would produce n_orientations_target orientations with get_naive_angles. 
+    INPUT:
+    n_orientations_target: int, the target number of orientations (e.g. 154 --> leads to angle_step=20 degrees, 610 --> angle_step=10 degrees, 2430 --> angle_step=5 degrees)
+    return_float: bool, if True, return the angle_step as a float. If False, return the angle_step rounded to the nearest integer (default: False)
+    OUTPUT:
+    angle_step: float, the estimated angle step (in degrees) that would produce n_orientations_target 
+    """
+    # coefficients below have been fitted to the number of angles returned by get_naive_angles for angles_steps = np.arange(5, 45, 2)
+    coefficients = np.array([-2.24633280e-06,  4.18450773e-04, -3.23998799e-02,  1.34959089e+00, -3.26649567e+01,  4.61277743e+02, -3.56936308e+03,  1.21971067e+04])
+    polynomial = np.poly1d(coefficients)
+    roots = (polynomial - n_orientations_target).r
+    real_roots = roots[np.isreal(roots)].real
+    valid_roots = real_roots[
+        (real_roots >= 5) & (real_roots <= 45)
+    ]
+    if valid_roots.size == 0:
+        return np.nan
+    
+    angle_step = valid_roots[np.argmin(np.abs(polynomial(valid_roots) - n_orientations_target))]
+    if return_float:
+        return angle_step
+    else:
+        return int(np.round(angle_step))

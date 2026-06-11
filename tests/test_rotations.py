@@ -104,13 +104,15 @@ def test_roundtrip_angles_match(n):
 
     phi1, theta1, psi1 = angles1[:, 0], angles1[:, 1], angles1[:, 2]
     #print(f"max angles1: {jnp.max(angles1)}, min angles1: {jnp.min(angles1)}, mean angles1: {jnp.mean(angles1)}")
-    R1_2 = jax.vmap(euler_zyz)(phi1, theta1, psi1)
+    #R1_2 = jax.vmap(euler_zyz)(phi1, theta1, psi1)
+    R1_2 = jax.vmap(lambda phi_, theta_, psi_: euler_zyz(phi_, theta_, psi_, degrees=False))(phi1, theta1, psi1)
     phi2, theta2, psi2 = angles2[:, 0], angles2[:, 1], angles2[:, 2]
     #print(f"max angles2: {jnp.max(angles2)}, min angles2: {jnp.min(angles2)}, mean angles2: {jnp.mean(angles2)}")
     #print(f"max phi1: {jnp.max(phi1)}, min phi1: {jnp.min(phi1)}, mean phi1: {jnp.mean(phi1)}")
     #print(f"max theta1: {jnp.max(theta1)}, min theta1: {jnp.min(theta1)}, mean theta1: {jnp.mean(theta1)}")
     #print(f"max psi1: {jnp.max(psi1)}, min psi1: {jnp.min(psi1)}, mean psi1: {jnp.mean(psi1)}")
-    R2_2 = jax.vmap(euler_zyz)(phi2, theta2, psi2)
+    #R2_2 = jax.vmap(euler_zyz)(phi2, theta2, psi2)
+    R2_2 = jax.vmap(lambda phi_, theta_, psi_: euler_zyz(phi_, theta_, psi_, degrees=False))(phi2, theta2, psi2)
     assert jnp.allclose(R1, R1_2, atol=1e-9)
     assert jnp.allclose(R2, R2_2, atol=1e-9)
 
