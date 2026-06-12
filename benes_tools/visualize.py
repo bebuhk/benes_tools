@@ -503,7 +503,7 @@ def plot_SO3_orientations(
 
     # base points and reference directions for all orientations at once
     base = Rs @ np.array([0.0, 0.0, 1.0])      # (n, 3) point on sphere
-    refdir = Rs @ np.array([0.0, 1.0, 0.0])    # (n, 3) arrow direction
+    refdir = Rs @ np.array([1.0, 0.0, 0.0])    # (n, 3) arrow direction (pointing along x direction)
 
     traces = []
 
@@ -647,3 +647,12 @@ segments:
     fig = visualize_molecule(mol)
     fig.write_html("nh3_view.html")
     print("wrote nh3_view.html")
+
+    # unity rotation (no rotation at all)
+    test = np.array([[ 1.0, 0.0, 0.0],
+                  [ 0.0, 1.0, 0.0],
+                  [ 0.0, 0.0, 1.0]],)
+    # plot only one arrow at its original position (z=1, x=y=0) pointing in the x direction (psi=0)
+    fig = plot_SO3_orientations(Rs=np.array([test]), plot_psi_as_arrow=True, arrows_in_sunset_colorscale=True,
+                                    highlight_indices=[])
+    fig.show()
