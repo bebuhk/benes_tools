@@ -435,8 +435,6 @@ def visualize_molecule(
 
 
 
-
-
 ## bene 12.6.2026: coded this with claude to visualize all SO(3) orientation samples (e.g. from Super-Fibonacci)
 """
 plot_so3.py — visualize a set of SO(3) orientations on the unit sphere.
@@ -447,12 +445,6 @@ shows that direction, so the in-plane angle encodes the psi twist.
 
 Colour runs base->tip via Paul Tol's colour-blind-safe 'sunset' scheme.
 """
-
-from __future__ import annotations
-
-import numpy as np
-import plotly.graph_objects as go
-
 
 # Paul Tol 'sunset' (colour-blind safe), base -> tip.
 _TOL_SUNSET = [
