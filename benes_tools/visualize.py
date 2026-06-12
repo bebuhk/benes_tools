@@ -433,6 +433,205 @@ def visualize_molecule(
     return fig
 
 
+
+
+
+
+## bene 12.6.2026: coded this with claude to visualize all SO(3) orientation samples (e.g. from Super-Fibonacci)
+"""
+plot_so3.py — visualize a set of SO(3) orientations on the unit sphere.
+
+Each orientation R places a base point R@(0,0,1) on the sphere and a
+reference direction R@(0,1,0); the arrow drawn in the local tangent plane
+shows that direction, so the in-plane angle encodes the psi twist.
+
+Colour runs base->tip via Paul Tol's colour-blind-safe 'sunset' scheme.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import plotly.graph_objects as go
+
+
+# Paul Tol 'sunset' (colour-blind safe), base -> tip.
+_TOL_SUNSET = [
+    "#364B9A", "#4A7BB7", "#6EA6CD", "#98CAE1", "#C2E4EF",
+    "#EAECCC", "#FEDA8B", "#FDB366", "#F67E4B", "#DD3D2D", "#A50026",
+]
+_TOL_SUNSET_SCALE = [
+    [i / (len(_TOL_SUNSET) - 1), c] for i, c in enumerate(_TOL_SUNSET)
+]
+
+# Paul Tol high-contrast qualitative scheme
+_TOL_HC_BLUE   = "#004488"
+_TOL_HC_YELLOW = "#DDAA33"
+_TOL_HC_RED    = "#BB5566"
+
+# 2-stop gradient: blue (arrow back) -> gold (arrow tip)
+_TOL_HC_SCALE = [[0.0, _TOL_HC_BLUE], [1.0, _TOL_HC_YELLOW]]
+
+
+def _unit_sphere(n=40):
+    u = np.linspace(0, 2 * np.pi, n)
+    v = np.linspace(0, np.pi, n)
+    x = np.outer(np.cos(u), np.sin(v))
+    y = np.outer(np.sin(u), np.sin(v))
+    z = np.outer(np.ones_like(u), np.cos(v))
+    return x, y, z
+
+
+def plot_SO3_orientations(
+    Rs,
+    plot_psi_as_arrow: bool = True,
+    highlight_indices=None,
+    arrow_size: float = 0.12,
+    sphere_opacity: float = 0.12,
+    arrows_in_sunset_colorscale: bool = False,
+    highlight_as_dot_halo: bool = False,
+):
+    """Plot a distribution of SO(3) orientations on the unit sphere.
+
+    Parameters
+    ----------
+    Rs : (n, 3, 3) array of rotation matrices.
+    plot_psi_as_arrow : bool
+        True -> draw an oriented triangle arrow per orientation (shows psi).
+        False -> draw a dot per orientation (fast for large n; no psi).
+    highlight_indices : sequence of int or None
+        Orientations to ring with a green contour (arrow outline or dot halo).
+    arrow_size : float
+        Arrow length in sphere radii.
+    sphere_opacity : float
+        Opacity of the reference unit sphere.
+    """
+    Rs = np.asarray(Rs)
+    n = Rs.shape[0]
+    hi = set() if highlight_indices is None else set(int(i) for i in highlight_indices)
+
+    # base points and reference directions for all orientations at once
+    base = Rs @ np.array([0.0, 0.0, 1.0])      # (n, 3) point on sphere
+    refdir = Rs @ np.array([0.0, 1.0, 0.0])    # (n, 3) arrow direction
+
+    traces = []
+
+    # --- the reference unit sphere ---
+    sx, sy, sz = _unit_sphere()
+    traces.append(
+        go.Surface(
+            x=sx, y=sy, z=sz, opacity=sphere_opacity,
+            colorscale=[[0, "#cfd4da"], [1, "#cfd4da"]],
+            showscale=False, hoverinfo="skip", name="unit sphere",
+        )
+    )
+
+    if plot_psi_as_arrow:
+        # project the reference direction into the tangent plane at base,
+        # so the arrow lies flat on the sphere surface.
+        radial = base                                       # outward normal
+        tang = refdir - (np.sum(refdir * radial, axis=1, keepdims=True)) * radial
+        norm = np.linalg.norm(tang, axis=1, keepdims=True)
+        norm = np.where(norm < 1e-12, 1.0, norm)            # guard degenerate
+        tang = tang / norm                                  # unit tangent (arrow dir)
+        # a sideways vector in the tangent plane for triangle width
+        side = np.cross(radial, tang)
+
+        L = arrow_size
+        Wt = arrow_size * 0.45                              # half-width at base
+        tip = base + L * tang
+        bl = base - 0.0 * tang + Wt * side                 # base-left
+        br = base - 0.0 * tang - Wt * side                 # base-right
+
+        # one Mesh3d per arrow with per-vertex intensity (base=0, tip=1)
+        for i in range(n):
+            verts = np.array([bl[i], br[i], tip[i]])        # (3,3)
+            traces.append(
+                go.Mesh3d(
+                    x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                    i=[0], j=[1], k=[2],
+                    intensity=[0.0, 0.0, 1.0],              
+                    colorscale=_TOL_HC_SCALE if not arrows_in_sunset_colorscale else _TOL_SUNSET_SCALE,       
+                    #colorscale=_TOL_HC_SCALE,       # back blue, tip gold
+                    #colorscale=_TOL_SUNSET_SCALE,   # back blue, tip red
+                    cmin=0.0, cmax=1.0,
+                    showscale=False, hoverinfo="skip",
+                    flatshading=True,
+                )
+            )
+            # # highlight: green outline around the triangle
+            # if i in hi:
+            #     loop = np.array([bl[i], br[i], tip[i], bl[i]])
+            #     traces.append(
+            #         go.Scatter3d(
+            #             x=loop[:, 0], y=loop[:, 1], z=loop[:, 2],
+            #             mode="lines", 
+            #             #line=dict(color="#1a9850", width=5),
+            #             line=dict(color=_TOL_HC_RED, width=5),    # arrow outline
+            #             hoverinfo="skip", showlegend=False,
+            #         )
+            #     )
+    else:
+        # dot mode: a single fast Scatter3d for all points
+        traces.append(
+            go.Scatter3d(
+                x=base[:, 0], y=base[:, 1], z=base[:, 2],
+                mode="markers",
+                marker=dict(size=3, 
+                            color=_TOL_HC_BLUE,
+                            #color=np.arange(n),
+                            #colorscale=_TOL_SUNSET_SCALE, 
+                            showscale=False),
+                hoverinfo="skip", showlegend=False,
+            )
+        )
+    if hi:
+        marker_red_dot = dict(size=7, color=_TOL_HC_RED)
+        marker_red_circle = dict(size=7, color="rgba(0,0,0,0)", line=dict(color=_TOL_HC_RED, width=4000))   # dot halo
+        idx = np.array(sorted(hi))
+        traces.append(
+            go.Scatter3d(
+                x=base[idx, 0], y=base[idx, 1], z=base[idx, 2],
+                mode="markers",
+                #marker=dict(size=8, color="rgba(0,0,0,0)",
+                #            line=dict(color="#1a9850", width=4)),
+                marker=marker_red_dot if highlight_as_dot_halo else marker_red_circle,
+                hoverinfo="skip", showlegend=False,
+            )
+        )
+
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(range=[-1.2, 1.2], title="x"),
+            yaxis=dict(range=[-1.2, 1.2], title="y"),
+            zaxis=dict(range=[-1.2, 1.2], title="z"),
+            aspectmode="cube",
+        ),
+        margin=dict(l=0, r=0, t=30, b=0),
+        title=f"SO(3) orientation samples (n = {n})",
+        showlegend=False,
+    )
+    return fig
+
+# if __name__ == "__main__":
+#     import sys
+#     sys.path.insert(0, ".")
+#     #from orientations import orientation_matrices
+
+#     #Rs = np.asarray(orientation_matrices(300))
+#     fig = plot_SO3_orientations(Rs, plot_psi_as_arrow=True, arrows_in_sunset_colorscale=True,
+#                                 highlight_indices=[0, 50, 150])
+#     #fig.write_html("so3_arrows.html")
+#     #print("wrote so3_arrows.html")
+#     fig.show()
+
+#     fig2 = plot_SO3_orientations(Rs, plot_psi_as_arrow=False,
+#                                  highlight_indices=[0, 50, 150])
+#     #fig2.write_html("so3_dots.html")
+#     #print("wrote so3_dots.html")
+#     fig2.show()
+
+
 if __name__ == "__main__":
     import io, yaml
     from pathlib import Path
