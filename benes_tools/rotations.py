@@ -300,3 +300,27 @@ def estimate_angle_step_from_n_orientations(n_orientations_target, return_float=
         return angle_step
     else:
         return int(np.round(angle_step))
+
+def get_angle_product_tp_with_psi(theta, phi, psi):
+    """for pairs of (theta, phi) angles, get the product with psi angles (i.e. all combinations of (theta, phi) with psi)
+    Input:
+        theta: array of shape (n_tp,)
+        phi: array of shape (n_tp,)
+        psi: array of shape (n_psi,)
+    Output:
+        theta: array of shape (n_tp * n_psi,)
+        phi: array of shape (n_tp * n_psi,)
+        psi: array of shape (n_tp * n_psi,)
+    """
+    tp = np.stack([theta, phi], axis=1)          # (n_tp, 2)
+    n_tp, n_psi = len(tp), len(psi)
+
+    angle_product = np.concatenate([
+        np.repeat(tp, n_psi, axis=0),            # each (theta,phi) repeated for every psi
+        np.tile(psi, n_tp)[:, None],             # psi cycled
+    ], axis=1)   
+    angle_product
+    theta = angle_product[:,0]
+    phi = angle_product[:,1]
+    psi = angle_product[:,2]
+    return theta, phi, psi

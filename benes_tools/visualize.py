@@ -481,6 +481,7 @@ def plot_SO3_orientations(
     sphere_opacity: float = 0.12,
     arrows_in_sunset_colorscale: bool = False,
     highlight_as_dot_halo: bool = False,
+    title: str = "",
 ):
     """Plot a distribution of SO(3) orientations on the unit sphere.
 
@@ -591,6 +592,9 @@ def plot_SO3_orientations(
             )
         )
 
+    #lines = [title + f"<b>{mol.name}</b> ({mol.force_field})"]
+    #title = "<br>".join(lines)
+
     fig = go.Figure(data=traces)
     fig.update_layout(
         scene=dict(
@@ -600,7 +604,12 @@ def plot_SO3_orientations(
             aspectmode="cube",
         ),
         margin=dict(l=0, r=0, t=30, b=0),
-        title=f"SO(3) orientation samples (n = {n})",
+        title=dict(
+            text=f"SO(3) orientation samples (n = {n})",
+            subtitle=dict(text=title) if title else None,
+        ),
+        #title=f"SO(3) orientation samples (n = {n}){f"<br>{title}" if title else ""}",
+        #title=dict(text=title, x=0.02, font=dict(size=12)),
         showlegend=False,
     )
     return fig
