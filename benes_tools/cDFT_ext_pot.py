@@ -10,6 +10,8 @@ Description: This script contains functions to calculate the Ewald potential
 import numpy as np
 import si_units as si
 import itertools
+from scipy.optimize import minimize_scalar
+from scipy.special import erfc, erf
 
 
 eps0 = 8.8541878188e-12 * si.COULOMB / si.VOLT / si.METER
@@ -20,6 +22,136 @@ factor_coulomb = (
 import numpy as np
 
 from scipy import special
+
+def get_kvec(lattice, lr_wv=2.291):
+    """kvec in abc directions (reverse engineered from RASPA for cutoff=12Å)"""
+    norm = np.linalg.norm(lattice, axis=1)
+    return list([int(x) for x in (norm + lr_wv - 0.58) / lr_wv])
+
+### bene 15.6.26
+def get_N_kvecs(lattice, k_cutoff):
+    """Get the number of k-vectors for a given lattice and k_cutoff."""
+    B, V = reciprocal_lattice(lattice)
+    #bmin = min(np.linalg.norm(B, axis=1))  ## this is bad, takes min for all three k-directions. 
+    bmin = np.linalg.norm(B, axis=1) ## better: take N individual for each k-direction
+    N_kvecs = np.ceil(k_cutoff / bmin).astype(int) + 1
+    #nmax = int(np.ceil(k_cutoff / bmin)) + 1
+    #rng = [range(-nmax, nmax+1) if p else range(0, 1) for p in periodic]
+    return N_kvecs
+
+def estimate_ewald_parameters(charges, cell, eps_total=1e-8, r_cut=None, alpha=None):
+    """Estimate (alpha, r_cut, k_cut) for a target total accuracy.
+
+    Mirrors the reference implementation's logic:
+      - split error budget equally between real and reciprocal space
+      - if r_cut is fixed, solve for alpha from the real-space estimate
+      - then get k_cut from the reciprocal-space estimate
+    Returns a dict.
+    """
+    charges = np.asarray(charges, float)
+    Q2 = float(charges @ charges)
+    N  = len(charges)
+    _, V = reciprocal_lattice(cell)
+    eps = eps_total/2
+
+    def real_err(rc, a):  return (Q2/np.sqrt(N))*erfc(a*rc)/rc
+    def recip_err(kc, a): return (Q2*a/(np.sqrt(N)*np.pi))*np.exp(-kc**2/(4*a**2))
+
+    if r_cut is not None and alpha is None:
+        z = minimize_scalar(lambda z: abs(erfc(z) - r_cut*eps)).x
+        alpha = z/r_cut
+    elif alpha is None:
+        # cost-balanced alpha: minimize rc^3 (real) + nkvec (recip) at fixed accuracy
+        Lc = V**(1/3)
+        def total_cost(a):
+            if a <= 0: return np.inf
+            z = minimize_scalar(lambda z: abs(erfc(z) - eps)).x
+            rc = z/a
+            kc = 2*a*np.sqrt(-np.log(eps))
+            n_kvecs = (2*kc*Lc/(2*np.pi) + 1)**3
+            rc_cost = rc**3 * N/V * 4/3*np.pi
+            return rc_cost + n_kvecs
+        grid = np.linspace(0.05, 1.5, 300)
+        alpha = grid[np.argmin([total_cost(a) for a in grid])]
+
+    if r_cut is None:
+        z = minimize_scalar(lambda z: abs(erfc(z) - eps)).x
+        r_cut = z/alpha
+    k_cut = 2*alpha*np.sqrt(-np.log(eps))
+    return dict(alpha=alpha, r_cut=r_cut, k_cut=k_cut,
+                error_real=real_err(r_cut, alpha), error_recip=recip_err(k_cut, alpha))
+
+def reciprocal_lattice(cell, omit_factor_2pi=False):
+    """Return reciprocal lattice vectors b_i (rows) and cell volume V. k = l1 b1 + l2 b2 + l3 b3."""
+    a1, a2, a3 = cell
+    V = np.dot(a1, np.cross(a2, a3))
+    b1 = 2*np.pi*np.cross(a2, a3)/V
+    b2 = 2*np.pi*np.cross(a3, a1)/V
+    b3 = 2*np.pi*np.cross(a1, a2)/V
+    if omit_factor_2pi:
+        return np.array([b1, b2, b3])/(2*np.pi), abs(V)
+    else:
+        return np.array([b1, b2, b3]), abs(V)
+
+# bene 15.6.26, from claude: /Users/bene/Code/V_ext/_ewald_cdft_derivation.ipynb
+def build_kvectors_LEGACY(cell, k_cut, periodic=(True, True, True), omit_factor_2pi=False, min_per_direction=False):
+    # this is wrong! for some skewed cells it has blind spots in the cutoffsphere (in kspace). see /Users/bene/Code/V_ext/_check_uc_replication.ipynb
+    """Integer-combination k-vectors with |k| <= k_cut, excluding k=0.
+
+    For non-cubic cells the spherical |k|<=k_cut cutoff (not a per-axis integer cap)
+    is what keeps the sampling correct under shear. `periodic=False` on an axis
+    forbids non-zero shifts along that reciprocal direction (scaffolding only).
+    """
+    B, V = reciprocal_lattice(cell, omit_factor_2pi=omit_factor_2pi)
+    bmin = min(np.linalg.norm(B, axis=1))
+    nmax = int(np.ceil(k_cut/bmin)) + 1
+    rng = [range(-nmax, nmax+1) if p else range(0, 1) for p in periodic]
+    if min_per_direction:
+    # # below slightly more efficient. leads to same ks.
+        bmin = np.linalg.norm(B, axis=1)
+        nmax = np.ceil(k_cut / bmin).astype(int) + 1
+        print(f"nmax={nmax}")
+        rng = [range(-nmax[i], nmax[i]+1) for i in range(len(nmax))]
+    ks = []
+    for l1 in rng[0]:
+        for l2 in rng[1]:
+            for l3 in rng[2]:
+                if l1 == l2 == l3 == 0:
+                    continue
+                k = l1*B[0] + l2*B[1] + l3*B[2]
+                if np.linalg.norm(k) <= k_cut:
+                    ks.append(k)
+    return np.array(ks) if ks else np.zeros((0, 3)), V
+
+def build_kvectors(cell, k_cut, periodic=(True, True, True)):
+    """Integer-combination k-vectors with |k| <= k_cut, excluding k=0.
+ 
+    Per-axis enumeration bound n_{i,max} = ceil(k_cut * |a_i| / 2pi). This is the
+    rigorous tight bound for any cell shape (cubic, orthorhombic, triclinic,
+    arbitrarily sheared), because |a_i| equals the perpendicular height of b_i
+    to the plane spanned by (b_j, b_k) — exactly the geometric quantity that
+    bounds |l_i| when |k| <= k_cut.
+ 
+    NB: this is NOT the same as ceil(k_cut / |b_i|): the latter undercounts on
+    sheared lattices because the b_i are not orthogonal.
+    """
+    cell = np.asarray(cell, float)
+    B, V = reciprocal_lattice(cell)
+    a_norms = np.linalg.norm(cell, axis=1)            # |a_i|
+    nmax = np.ceil(k_cut * a_norms / (2*np.pi)).astype(int)
+ 
+    rng = [range(-nmax[i], nmax[i]+1) if periodic[i] else range(0, 1) for i in range(3)]
+    ks = []
+    for l1 in rng[0]:
+        for l2 in rng[1]:
+            for l3 in rng[2]:
+                if l1 == l2 == l3 == 0:
+                    continue
+                k = l1*B[0] + l2*B[1] + l3*B[2]
+                if np.linalg.norm(k) <= k_cut:
+                    ks.append(k)
+    return (np.array(ks) if ks else np.zeros((0, 3))), V
+
 
 def ewald_lr_grid(lattice, charges, atoms_abc, grid_xyz, N, alpha: float = 0.341429):
     """the long-range part of the Ewald sum
@@ -73,7 +205,7 @@ def ewald_lr_grid(lattice, charges, atoms_abc, grid_xyz, N, alpha: float = 0.341
             list(range(-N[1], N[1] + 1)),
             list(range(-N[2], N[2] + 1)),
         ]
-    ):
+    ):  # note: more efficient with np.linalg.norm(k) <= k_cut.... (bene 15.6.26)
         # 0: n1=0, n2=-4, n3=-4 (for N=4)
         # 1: n1=1, n2=-4, n3=-4
         if n1 == 0 and n2 == 0 and n3 == 0:
@@ -543,8 +675,6 @@ def compute_num_images(lattice, cutoff, return_inv=False):
         rep_lat_inv = np.linalg.inv(rep_lat)
         return rep, rep_lat, rep_lat_inv
     return rep, rep_lat
-
-
 
 ## bene 8.6.26: get the FEA (free-energy-average function) and the canonical average function (to be avoided but used by vincent)
 def FEA_Abraham(E_sum_K_na, temperature_K = 298.15):
