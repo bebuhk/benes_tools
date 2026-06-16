@@ -40,7 +40,6 @@ def get_N_kvecs_LEGACY(lattice, k_cutoff):
     #nmax = int(np.ceil(k_cutoff / bmin)) + 1
     #rng = [range(-nmax, nmax+1) if p else range(0, 1) for p in periodic]
     return N_kvecs
-
 ### bene 16.6.26
 def get_N_kvecs(lattice, k_cutoff):
     # corrected
@@ -48,7 +47,8 @@ def get_N_kvecs(lattice, k_cutoff):
     #B, V = reciprocal_lattice(lattice)
     a_norms = np.linalg.norm(lattice, axis=1)            # |a_i|
     N_kvecs = np.ceil(k_cutoff * a_norms / (2*np.pi)).astype(int)
-    return N_kvecs
+    return list([int(N_kvecs[i]) for i in range(len(N_kvecs))])
+
 
 def reciprocal_lattice(cell, omit_factor_2pi=False):
     """Return reciprocal lattice vectors b_i (rows) and cell volume V. k = l1 b1 + l2 b2 + l3 b3."""
