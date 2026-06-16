@@ -24,12 +24,14 @@ import numpy as np
 from scipy import special
 
 def get_kvec(lattice, lr_wv=2.291):
+    # WRONG for some skewed unit cells!!
     """kvec in abc directions (reverse engineered from RASPA for cutoff=12Å)"""
     norm = np.linalg.norm(lattice, axis=1)
     return list([int(x) for x in (norm + lr_wv - 0.58) / lr_wv])
 
 ### bene 15.6.26
-def get_N_kvecs(lattice, k_cutoff):
+def get_N_kvecs_LEGACY(lattice, k_cutoff):
+    # WRONG for some skewed unit cells!!
     """Get the number of k-vectors for a given lattice and k_cutoff."""
     B, V = reciprocal_lattice(lattice)
     #bmin = min(np.linalg.norm(B, axis=1))  ## this is bad, takes min for all three k-directions. 
@@ -39,47 +41,14 @@ def get_N_kvecs(lattice, k_cutoff):
     #rng = [range(-nmax, nmax+1) if p else range(0, 1) for p in periodic]
     return N_kvecs
 
-def estimate_ewald_parameters(charges, cell, eps_total=1e-8, r_cut=None, alpha=None):
-    """Estimate (alpha, r_cut, k_cut) for a target total accuracy.
-
-    Mirrors the reference implementation's logic:
-      - split error budget equally between real and reciprocal space
-      - if r_cut is fixed, solve for alpha from the real-space estimate
-      - then get k_cut from the reciprocal-space estimate
-    Returns a dict.
-    """
-    charges = np.asarray(charges, float)
-    Q2 = float(charges @ charges)
-    N  = len(charges)
-    _, V = reciprocal_lattice(cell)
-    eps = eps_total/2
-
-    def real_err(rc, a):  return (Q2/np.sqrt(N))*erfc(a*rc)/rc
-    def recip_err(kc, a): return (Q2*a/(np.sqrt(N)*np.pi))*np.exp(-kc**2/(4*a**2))
-
-    if r_cut is not None and alpha is None:
-        z = minimize_scalar(lambda z: abs(erfc(z) - r_cut*eps)).x
-        alpha = z/r_cut
-    elif alpha is None:
-        # cost-balanced alpha: minimize rc^3 (real) + nkvec (recip) at fixed accuracy
-        Lc = V**(1/3)
-        def total_cost(a):
-            if a <= 0: return np.inf
-            z = minimize_scalar(lambda z: abs(erfc(z) - eps)).x
-            rc = z/a
-            kc = 2*a*np.sqrt(-np.log(eps))
-            n_kvecs = (2*kc*Lc/(2*np.pi) + 1)**3
-            rc_cost = rc**3 * N/V * 4/3*np.pi
-            return rc_cost + n_kvecs
-        grid = np.linspace(0.05, 1.5, 300)
-        alpha = grid[np.argmin([total_cost(a) for a in grid])]
-
-    if r_cut is None:
-        z = minimize_scalar(lambda z: abs(erfc(z) - eps)).x
-        r_cut = z/alpha
-    k_cut = 2*alpha*np.sqrt(-np.log(eps))
-    return dict(alpha=alpha, r_cut=r_cut, k_cut=k_cut,
-                error_real=real_err(r_cut, alpha), error_recip=recip_err(k_cut, alpha))
+### bene 16.6.26
+def get_N_kvecs(lattice, k_cutoff):
+    # corrected
+    """Get the number of k-vectors for a given lattice and k_cutoff."""
+    #B, V = reciprocal_lattice(lattice)
+    a_norms = np.linalg.norm(lattice, axis=1)            # |a_i|
+    N_kvecs = np.ceil(k_cutoff * a_norms / (2*np.pi)).astype(int)
+    return N_kvecs
 
 def reciprocal_lattice(cell, omit_factor_2pi=False):
     """Return reciprocal lattice vectors b_i (rows) and cell volume V. k = l1 b1 + l2 b2 + l3 b3."""
@@ -123,7 +92,7 @@ def build_kvectors_LEGACY(cell, k_cut, periodic=(True, True, True), omit_factor_
                     ks.append(k)
     return np.array(ks) if ks else np.zeros((0, 3)), V
 
-def build_kvectors(cell, k_cut, periodic=(True, True, True)):
+def build_kvectors(cell, k_cut, periodic=(True, True, True), verbose=False):
     """Integer-combination k-vectors with |k| <= k_cut, excluding k=0.
  
     Per-axis enumeration bound n_{i,max} = ceil(k_cut * |a_i| / 2pi). This is the
@@ -139,6 +108,9 @@ def build_kvectors(cell, k_cut, periodic=(True, True, True)):
     B, V = reciprocal_lattice(cell)
     a_norms = np.linalg.norm(cell, axis=1)            # |a_i|
     nmax = np.ceil(k_cut * a_norms / (2*np.pi)).astype(int)
+    if verbose:
+        print(f"nmax={nmax}")
+    
  
     rng = [range(-nmax[i], nmax[i]+1) if periodic[i] else range(0, 1) for i in range(3)]
     ks = []
