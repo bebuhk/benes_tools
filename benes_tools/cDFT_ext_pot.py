@@ -299,6 +299,12 @@ def calc_C_sr_ExtPot_c(coords_abc, lattice, grid_xyz, charges, rcut=12.0, alpha=
     Grid points where inf_mask is True are skipped and set to +inf.
     the point charges around a cutoff sphere with radius rcut around center_grid (if provided) are considered (otherwise around grid_xyz).
     """
+
+    coulomb_sr  = np.zeros(grid_xyz.shape[:3])
+    if rcut <= 0.0:
+        print(f"Cutoff radius was choosen smaller or equal 0.0 (rcut={rcut:.4f}). -> returning zeros for the short range Coulombic part of the external potential.")
+        return coulomb_sr
+
     coords_xyz   = coords_abc @ lattice
     rep, rep_lat, _ = compute_num_images(lattice, rcut, return_inv=True)
     n_atoms      = len(coords_abc)
@@ -316,7 +322,7 @@ def calc_C_sr_ExtPot_c(coords_abc, lattice, grid_xyz, charges, rcut=12.0, alpha=
                     count += 1
 
     rep_lat_inv = np.linalg.inv(rep_lat)
-    coulomb_sr  = np.zeros(grid_xyz.shape[:3])
+
     if inf_mask is not None:
         coulomb_sr[inf_mask] = np.inf
 
