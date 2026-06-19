@@ -482,6 +482,7 @@ def plot_SO3_orientations(
     arrows_in_sunset_colorscale: bool = False,
     highlight_as_dot_halo: bool = False,
     title: str = "",
+    save_path = None,
 ):
     """Plot a distribution of SO(3) orientations on the unit sphere.
 
@@ -612,6 +613,24 @@ def plot_SO3_orientations(
         #title=dict(text=title, x=0.02, font=dict(size=12)),
         showlegend=False,
     )
+
+    if save_path is not None:
+        ext = save_path.lower().rsplit(".", 1)[-1]
+        if ext in {"svg", "pdf", "png"}:
+            try:
+                fig.write_image(save_path, width=800, height=600)
+            except Exception as e:
+                html_path = save_path.rsplit(".", 1)[0] + ".html"
+                fig.write_html(html_path)
+                print(f"Static export failed ({e}); wrote {html_path} instead. "
+                    f"For SVG/PDF: pip install 'plotly>=6.1.1' and run "
+                    f"kaleido_get_chrome.")
+        elif ext in {"html", "htm"}:
+            fig.write_html(save_path)
+        else:
+            raise ValueError(f"unsupported save_path extension: {ext}")
+        print(f"Wrote {save_path}")
+
     return fig
 
 # if __name__ == "__main__":
