@@ -56,3 +56,13 @@ def fibonacci_bene(n_full_sphere):
     phi = (i % golden_ratio) * 360 / golden_ratio # azimuthal angle in radians
     theta = np.arcsin(2 * i/ (2 * N + 1)) * 180/np.pi  # polar angle in degrees, arcsin maps to [-90, 90]
     return theta + 90, phi
+
+
+def get_angle_between_vectors(v1, v2, degrees=True):
+    v1_u = v1 / np.linalg.norm(v1)
+    v2_u = v2 / np.linalg.norm(v2)
+    angle_rad = np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+    if not degrees:
+        return angle_rad
+    angle_deg = np.degrees(angle_rad)
+    return angle_deg
