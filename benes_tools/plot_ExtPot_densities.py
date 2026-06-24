@@ -514,7 +514,7 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
                                    plot_cube=0, # if >0, plot cube with given edge length (in Å) at origin for distance reference
                                    width=800, height=600,
                                    save_path=None,
-                                   show_histogram=False, nbins = 500,
+                                   show_histogram=False, nbins = 50,
                                    y_lo_hist=0.02, y_hi_hist=0.94,
                                    x_center_scene=-0.0, y_center_scene=0.0,
                                    mark_min_on_colorbar=True,  

@@ -94,7 +94,7 @@ def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, 
     x = np.arange(E_sum_K_na.shape[0])
 
     # Left axis: energy
-    ax1.plot(x, E_sum_K_na, label='Total Energy', color=_TOL_HC_GREEN)
+    ax1.plot(x, E_sum_K_na, label='Total Energy E', color=_TOL_HC_GREEN)
     ax1.axhline(np.average(E_sum_K_na), color=_TOL_HC_GREEN, linestyle='--',
             label=f'Average Total = {np.average(E_sum_K_na):.2f} K')
     ax1.axhline(0, color='gray', linestyle='dashed')
@@ -115,7 +115,7 @@ def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, 
     ax1.set_title(f'Energy and Boltzmann weight vs angle index (sum of weights = {np.sum(w):.2e})')
 
     # Bottom plot: energy only, capped at 1000 K
-    ax3.plot(x, E_sum_K_na, color=_TOL_HC_GREEN, label='Total Energy. (min={:.2f} K)'.format(np.min(E_sum_K_na)))
+    ax3.plot(x, E_sum_K_na, color=_TOL_HC_GREEN, label='Total Energy E. (min={:.2f} K)'.format(np.min(E_sum_K_na)))
     ax3.axhline(np.average(E_sum_K_na), color=_TOL_HC_GREEN, linestyle='--',
             label=f'Average Total = {np.average(E_sum_K_na):.2f} K')
     ax3.axhline(Ew, color=_TOL_HC_BLUE, linestyle='dashed', label=f'canonical average = {Ew:.2f} K = {Ew/temperature_K:.6f} (ul)')
@@ -128,18 +128,21 @@ def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, 
     ax3.set_title(f'Total energy vs angle index (cutoff at {y_lim_K} K) - Boltzmann-weighted mean = {Ew:.2f} K = {Ew/temperature_K:.6f} (ul)')
 
     plt.tight_layout()
-    plt.show()
 
     if save_path is not None:
         plt.savefig(save_path)
         print(f"Saved figure to {save_path}")
+    
+    plt.show()
 
     if return_Ew:
         return Ew
 
+
 ## bene 12.06.2026: this is not an bolzman nor FEA average but the LJ and Coulomb part that constitute the total energy.
-def plot_energy_distributions(energies_LJ_K_na, energies_C_K_na, E_sum_K_na=None, title_suffix='', save_path=None):
-    """Plot the distributions of LJ, Coulomb, and total energies across orientations for the first grid point.
+def plot_energy_distributions(energies_LJ_K_na, energies_C_K_na, E_sum_K_na=None, title_suffix='', save_path=None,
+                              label_LJ='LJ', label_C='Coulomb', label_Total='Total'):
+    """Plot the distributions of LJ, Coulomb, and total energies across orientations for one grid point.
     Input:
     - energies_LJ_K_na: (N_orientations, N_grid_points) array of LJ energies in K.
     """
@@ -158,11 +161,11 @@ def plot_energy_distributions(energies_LJ_K_na, energies_C_K_na, E_sum_K_na=None
     _TOL_HC_YELLOW = "#DDAA33"
     _TOL_HC_RED    = "#BB5566"
 
-    LJ_array = energies_LJ_K_na[:, 0] # with len = n_orientations 
+    LJ_array = energies_LJ_K_na # with len = n_orientations 
     LJ_avg = np.mean(LJ_array)
     LJ_min = np.min(LJ_array)
     LJ_max = np.max(LJ_array)
-    C_array = energies_C_K_na[:, 0] # with len = n_orientations 
+    C_array = energies_C_K_na # with len = n_orientations 
     C_avg = np.mean(C_array)
     C_min = np.min(C_array)
     C_max = np.max(C_array)
@@ -175,31 +178,33 @@ def plot_energy_distributions(energies_LJ_K_na, energies_C_K_na, E_sum_K_na=None
 
     # plot energies over angle index
     plt.figure(figsize=(10, 4))
-    plt.suptitle(f'Energy distributions across orientations\n{title_suffix}', fontsize=12)
+    plt.suptitle(f'Energy distributions across orientations\n{title_suffix}', fontsize=10)
     plt.subplot(1, 2, 1)
-    plt.plot(LJ_array, label='LJ', color=_TOL_HC_RED)
-    plt.hlines(LJ_avg, 0, energies_LJ_K_na.shape[0]-1, colors=_TOL_HC_RED, linestyles='dashed', label='Average LJ = {:.2f} K'.format(LJ_avg))
-    plt.plot(C_array, label='Coulomb', color=_TOL_HC_BLUE)
-    plt.hlines(C_avg, 0, energies_LJ_K_na.shape[0]-1, colors=_TOL_HC_BLUE, linestyles='dashed', label='Average Coulomb = {:.2f} K'.format(C_avg))
+    plt.plot(LJ_array, label=label_LJ, color=_TOL_HC_RED)
+    plt.hlines(LJ_avg, 0, energies_LJ_K_na.shape[0]-1, colors=_TOL_HC_RED, linestyles='dashed', label='Average {} = {:.2f} K'.format(label_LJ.split("(")[0], LJ_avg))
+    plt.plot(C_array, label=label_C, color=_TOL_HC_BLUE)
+    plt.hlines(C_avg, 0, energies_LJ_K_na.shape[0]-1, colors=_TOL_HC_BLUE, linestyles='dashed', label='Average {} = {:.2f} K'.format(label_C.split("(")[0], C_avg))
     plt.xlabel('angle index')
     plt.ylabel('Energy (K)')
     plt.title('Energy vs angle index\nmin-max {:.2f}..{:.2f} K (LJ), {:.2f}..{:.2f} K (Coul)'.format(LJ_min, LJ_max, C_min, C_max), fontsize=10)
     plt.legend(fontsize=8)
     plt.subplot(1, 2, 2)
-    plt.plot(LJ_array, label='LJ', color=_TOL_HC_RED)
-    plt.plot(C_array, label='Coulomb', color=_TOL_HC_BLUE)
-    plt.hlines(Total_avg, 0, energies_LJ_K_na.shape[0]-1, colors=_TOL_HC_YELLOW, linestyles='dashed', label='Average Total = {:.2f} K'.format(Total_avg))
-    plt.plot(Total_array, label='Total', color=_TOL_HC_YELLOW)
+    plt.plot(LJ_array, label=label_LJ, color=_TOL_HC_RED)
+    plt.plot(C_array, label=label_C, color=_TOL_HC_BLUE)
+    plt.hlines(Total_avg, 0, energies_LJ_K_na.shape[0]-1, colors=_TOL_HC_YELLOW, linestyles='dashed', label='Average {} = {:.2f} K'.format(label_Total.split("(")[0], Total_avg))
+    plt.plot(Total_array, label=label_Total, color=_TOL_HC_YELLOW)
     plt.xlabel('angle index')
     plt.ylabel('Energy (K)')
     plt.title('Total energy vs angle index\n min-max {:.2f}..{:.2f} K'.format(Total_min, Total_max), fontsize=10)
     plt.legend(fontsize=8)
     plt.tight_layout()
-    plt.show()
 
     if save_path is not None:
         plt.savefig(save_path)
         print(f"Saved figure to {save_path}")
+
+        plt.show()
+
 
 if __name__ == "__main__":
     pass
