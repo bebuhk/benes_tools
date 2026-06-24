@@ -125,7 +125,7 @@ def build_kvectors(cell, k_cut, periodic=(True, True, True), verbose=False):
     return (np.array(ks) if ks else np.zeros((0, 3))), V
 
 
-def ewald_lr_grid(lattice, charges, atoms_abc, grid_xyz, N, alpha: float = 0.341429):
+def ewald_lr_grid(lattice, charges, atoms_abc, grid_xyz, N, alpha: float = 0.341429, verbose: bool = True):
     """the long-range part of the Ewald sum
     INPUT:
     - lattice: the lattice vectors (3x3 matrix, abc vectors as rows)
@@ -157,7 +157,7 @@ def ewald_lr_grid(lattice, charges, atoms_abc, grid_xyz, N, alpha: float = 0.341
 
     grid_abc = grid_xyz @ np.linalg.inv(lattice)
 
-    if sum(charges) != 0:
+    if sum(charges) != 0 and verbose:
         print(f"Warning: the total charge of the system is not zero: {sum(charges)}")
 
     V_lr = np.zeros_like(grid_abc[:, :, :, 0])

@@ -61,7 +61,7 @@ def plot_canonical_average_analysis(E_sum_K_na, temperature_K = 298.15, return_E
         return Ew
 
 
-def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, return_Ew=False, title="", y_lim_K=1000, save_path=None):
+def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, return_Ew=False, title="", y_lim_K=1000, save_path=None, show_plot=True):
     """Plot the distributions of total energies across orientations for a grid point.
     Input:
     - E_sum_K_na: (N_orientations,) array of total energies in K
@@ -133,7 +133,8 @@ def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, 
         plt.savefig(save_path)
         print(f"Saved figure to {save_path}")
     
-    plt.show()
+    if show_plot:
+        plt.show()
 
     if return_Ew:
         return Ew
@@ -141,7 +142,7 @@ def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, 
 
 ## bene 12.06.2026: this is not an bolzman nor FEA average but the LJ and Coulomb part that constitute the total energy.
 def plot_energy_distributions(energies_LJ_K_na, energies_C_K_na, E_sum_K_na=None, title_suffix='', save_path=None,
-                              label_LJ='LJ', label_C='Coulomb', label_Total='Total'):
+                              label_LJ='LJ', label_C='Coulomb', label_Total='Total', show_plot=True):
     """Plot the distributions of LJ, Coulomb, and total energies across orientations for one grid point.
     Input:
     - energies_LJ_K_na: (N_orientations, N_grid_points) array of LJ energies in K.
@@ -203,6 +204,7 @@ def plot_energy_distributions(energies_LJ_K_na, energies_C_K_na, E_sum_K_na=None
         plt.savefig(save_path)
         print(f"Saved figure to {save_path}")
 
+    if show_plot:
         plt.show()
 
 

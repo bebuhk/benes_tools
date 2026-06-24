@@ -514,11 +514,13 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
                                    plot_cube=0, # if >0, plot cube with given edge length (in Å) at origin for distance reference
                                    width=800, height=600,
                                    save_path=None,
-                                   show_histogram=False, nbins = 50,
+                                   show_histogram=False, nbins = 50, include_out_of_bounds_in_histogram=False,
                                    y_lo_hist=0.02, y_hi_hist=0.94,
                                    x_center_scene=-0.0, y_center_scene=0.0,
                                    mark_min_on_colorbar=True,  
-                                   show_legend=True,                             
+                                   show_legend=True,
+                                   plot_out_of_bounds_at_limits=False,     
+                                   show_plot=True,                       
                                    ):
     """
     Plot the external potential of a given system in 3D using Plotly.
@@ -544,10 +546,10 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
     """
     
     # Reshape the grid coordinates and potential values
-    x_coords = grid_xyz[:, :, :, 0].flatten()
-    y_coords = grid_xyz[:, :, :, 1].flatten()
-    z_coords = grid_xyz[:, :, :, 2].flatten()
-    num_grid_points = len(x_coords)
+    x_coords_or = grid_xyz[:, :, :, 0].flatten()
+    y_coords_or = grid_xyz[:, :, :, 1].flatten()
+    z_coords_or = grid_xyz[:, :, :, 2].flatten()
+    num_grid_points = len(x_coords_or)
     grid_info_text = "<br># grid points: " + str(num_grid_points) + f" (a1: {int(grid_xyz.shape[0])}, a2: {int(grid_xyz.shape[1])}, a3: {int(grid_xyz.shape[2])})"
 
     energy_unit = "[K]"
@@ -578,29 +580,34 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         lattice_info_text = f"<br>lattice: α={get_angle_between_vectors(lattice[1], lattice[2]):.2f}°, β={get_angle_between_vectors(lattice[0], lattice[2]):.2f}°, γ={get_angle_between_vectors(lattice[1], lattice[0]):.2f}°. V={volume_unit_cell_A3:.2f} Å³, per gp:{grid_point_volume:.6f} Å³"#({num_grid_points} gps)<br>"
         subtitle += lattice_info_text
 
-    potentials = external_potential_K.flatten()
+    potentials_or = external_potential_K.flatten()
     if temperature_K is not None:
-        potentials = potentials / temperature_K
+        potentials_or = potentials_or / temperature_K
 
     # filter out points outside the specified bounds if provided
-    mask = np.ones_like(potentials, dtype=bool)  # Initialize mask to include all points
+    mask = np.ones_like(potentials_or, dtype=bool)  # Initialize mask to include all points
     if upper_bound is not None:
-        mask_up = potentials <= upper_bound
+        mask_up = potentials_or <= upper_bound
         n_filtered_up = np.sum(~mask_up)
         if n_filtered_up > 0:
             print(f"WARNING: Filtering out {n_filtered_up} points above upper_bound of {upper_bound} K")
         mask &= mask_up  # Combine with existing mask
     if lower_bound is not None:
-        mask_low = potentials >= lower_bound
+        mask_low = potentials_or >= lower_bound
         n_filtered_low = np.sum(~mask_low)
         if n_filtered_low > 0:
             print(f"WARNING: Filtering out {n_filtered_low} points below lower_bound of {lower_bound} K")
         mask &= mask_low  # Combine with existing mask
 
-    x_coords = x_coords[mask]
-    y_coords = y_coords[mask]
-    z_coords = z_coords[mask]
-    potentials = potentials[mask]
+    x_coords = x_coords_or[mask]
+    y_coords = y_coords_or[mask]
+    z_coords = z_coords_or[mask]
+    potentials = potentials_or[mask]
+    potentials_cut = potentials_or.copy()
+    if exp_pot_provided and lower_bound is not None:
+        potentials_cut[potentials_cut < lower_bound] = lower_bound
+    if exp_pot_provided  and upper_bound is not None:
+        potentials_cut[potentials_cut > upper_bound] = upper_bound
     has_data = len(potentials) > 0
     if not has_data:
         print("WARNING: No grid points remain after applying bounds "
@@ -608,14 +615,18 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         subtitle += "<br>WARNING: No grid points remain after applying bounds."
         #return
 
+    if include_out_of_bounds_in_histogram:
+        potentials_hist = potentials_cut.copy()
+    else:
+        potentials_hist = potentials.copy()
 
     if show_histogram and exp_pot_provided:
         # decide the energy range the histogram should span (match colorbar)
-        e_lo = lower_bound if lower_bound is not None else np.nanmin(potentials)
-        e_hi = upper_bound if upper_bound is not None else np.nanmax(potentials)
+        e_lo = lower_bound if lower_bound is not None else np.nanmin(potentials_hist)
+        e_hi = upper_bound if upper_bound is not None else np.nanmax(potentials_hist)
 
         # build the histogram on the host side
-        counts, edges = np.histogram(potentials[~np.isnan(potentials)],
+        counts, edges = np.histogram(potentials_hist[~np.isnan(potentials_hist)],
                                     bins=nbins, range=(e_lo, e_hi))
         centers = 0.5 * (edges[:-1] + edges[1:])
         #print(f"centers: {centers} (shape: {centers.shape}). edges: {edges} (shape: {edges.shape}))")
@@ -645,53 +656,62 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         hist_trace = []
 
     # Create 3D scatter plot using Plotly
-    scatter_plot = go.Scatter3d(
-        x=x_coords, y=y_coords, z=z_coords,
-        mode='markers',
-            showlegend=True,
-        marker=dict(
-            size=marker_size, # size of the markers (points)
-            color=potentials,  # Color by potential values
-            #colorscale='Viridis', #'Cividis' 'Plasma',#'Viridis',
-            #colorscale=sunset_scale,
-            colorscale=[
-                [i / 255, f"rgb({int(r*255)},{int(g*255)},{int(b*255)})"]
-                for i, (r, g, b, a) in enumerate(get_cmap('sunset')(np.linspace(1, 0, 256)))
-            ],
-            # colorscale=[  # paul tols rainbow
-            #     [i / 33, c] for i, c in enumerate([
-            #         "#E8ECFB", "#DDD8EF", "#D1C1E1", "#C3A8D1", "#B58FC2", "#A778B4",
-            #         "#9B62A7", "#8C4E99", "#6F4C9B", "#6059A9", "#5568B8", "#4E79C5",
-            #         "#4D8AC6", "#4E96BC", "#549EB3", "#59A5A9", "#60AB9E", "#69B190",
-            #         "#77B77D", "#8CBC68", "#A6BE54", "#BEBC48", "#D1B541", "#DDAA3C",
-            #         "#E49C39", "#E78C35", "#E97A31", "#E7652F", "#E34F2B", "#DD3D2D",
-            #         "#D22D2D", "#C11E31", "#AB1636", "#911539"
-            #     ])
-            # ], #'Cividis' 'Plasma',#'Viridis',
-            cmax=upper_bound if upper_bound is not None else potentials.max(),
-            cmin=lower_bound if lower_bound is not None else potentials.min(),
-            showscale=exp_pot_provided,
-            colorbar=dict(
-                        title=f"V<sup>ext</sup> {energy_unit}", 
-                        x=0.0, # move colorbar to the right
-                        xanchor="left",
-                        bgcolor="rgba(0,0,0,0)",      # transparent background
-                        #bgcolor="rgba(255,0,0,0.4)", # semi-transparent white background
-                        #borderwidth=0,
-                        outlinewidth=0,              # drop the border box
-                        borderwidth=0,
-                        len=1.0,           # optional: shorter bar (whatch out with histogram alignment if enabled)
-                        thickness=15,      # optional: thinner
-                        tickmode="auto",          # keep default ticks
-                        # add the min as an extra annotated tick:
-                        tickvals=None,            # let auto handle the rest
-                        ),
-             opacity=0.8,
-            ),
-        text=[f"V<sup>ext</sup>: {p:.2f} {energy_unit} [gp: {i}]" for i, p in enumerate(potentials)], # Add potential values to hover text
-        name=f'{num_grid_points} grid points' if not exp_pot_provided else f'V<sup>ext</sup> ({num_grid_points} gps)',
-        hoverinfo='x+y+z+text'  # Show x, y, z, and potential values on hover
-    )
+    def get_scatter_trace(x_coords, y_coords, z_coords, potentials, marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided, label_suffix=""):
+        return go.Scatter3d(
+            x=x_coords, y=y_coords, z=z_coords,
+            mode='markers',
+                showlegend=True,
+            marker=dict(
+                size=marker_size, # size of the markers (points)
+                color=potentials,  # Color by potential values
+                #colorscale='Viridis', #'Cividis' 'Plasma',#'Viridis',
+                #colorscale=sunset_scale,
+                colorscale=[
+                    [i / 255, f"rgb({int(r*255)},{int(g*255)},{int(b*255)})"]
+                    for i, (r, g, b, a) in enumerate(get_cmap('sunset')(np.linspace(1, 0, 256)))
+                ],
+                # colorscale=[  # paul tols rainbow
+                #     [i / 33, c] for i, c in enumerate([
+                #         "#E8ECFB", "#DDD8EF", "#D1C1E1", "#C3A8D1", "#B58FC2", "#A778B4",
+                #         "#9B62A7", "#8C4E99", "#6F4C9B", "#6059A9", "#5568B8", "#4E79C5",
+                #         "#4D8AC6", "#4E96BC", "#549EB3", "#59A5A9", "#60AB9E", "#69B190",
+                #         "#77B77D", "#8CBC68", "#A6BE54", "#BEBC48", "#D1B541", "#DDAA3C",
+                #         "#E49C39", "#E78C35", "#E97A31", "#E7652F", "#E34F2B", "#DD3D2D",
+                #         "#D22D2D", "#C11E31", "#AB1636", "#911539"
+                #     ])
+                # ], #'Cividis' 'Plasma',#'Viridis',
+                cmax=upper_bound if upper_bound is not None else potentials.max(),
+                cmin=lower_bound if lower_bound is not None else potentials.min(),
+                showscale=exp_pot_provided,
+                colorbar=dict(
+                            title=f"V<sup>ext</sup> {energy_unit}", 
+                            x=0.0, # move colorbar to the right
+                            xanchor="left",
+                            bgcolor="rgba(0,0,0,0)",      # transparent background
+                            #bgcolor="rgba(255,0,0,0.4)", # semi-transparent white background
+                            #borderwidth=0,
+                            outlinewidth=0,              # drop the border box
+                            borderwidth=0,
+                            len=1.0,           # optional: shorter bar (whatch out with histogram alignment if enabled)
+                            thickness=15,      # optional: thinner
+                            tickmode="auto",          # keep default ticks
+                            # add the min as an extra annotated tick:
+                            tickvals=None,            # let auto handle the rest
+                            ),
+                opacity=0.8,
+                ),
+            text=[f"V<sup>ext</sup>: {p:.2f} {energy_unit} [gp: {i}]" for i, p in enumerate(potentials)], # Add potential values to hover text
+            name=f'{num_grid_points} grid points' if not exp_pot_provided else f'V<sup>ext</sup> ' + label_suffix + f'({len(potentials)}/{num_grid_points} gps)',
+            hoverinfo='x+y+z+text'  # Show x, y, z, and potential values on hover
+        )
+    scatter_plots = [get_scatter_trace(x_coords, y_coords, z_coords, potentials, marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided)]
+    if plot_out_of_bounds_at_limits and exp_pot_provided:
+        scatter_plot_above_upper = get_scatter_trace(x_coords_or[~mask_up], y_coords_or[~mask_up], z_coords_or[~mask_up], potentials_or[~mask_up], marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided,
+                                                     label_suffix=f">{upper_bound:.0f} ")
+        scatter_plot_below_lower = get_scatter_trace(x_coords_or[~mask_low], y_coords_or[~mask_low], z_coords_or[~mask_low], potentials_or[~mask_low], marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided,
+                                                     label_suffix=f"<{lower_bound:.0f} ")
+        scatter_plots.append(scatter_plot_above_upper)
+        scatter_plots.append(scatter_plot_below_lower)
     
     #plot a cube with edge length of 10 Å at origin for distance reference if desired
     cube_traces = []
@@ -871,7 +891,7 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
     }
 
     # Create figure and display it
-    fig = go.Figure(data=[scatter_plot] + hist_trace + lattice_traces + cube_traces, layout=layout)
+    fig = go.Figure(data=scatter_plots + hist_trace + lattice_traces + cube_traces, layout=layout)
     # fig.update_layout(
     #     width=x_range*y_range*4,  # Set the width of the plot
     #     height=z_range*40  # Set the height of the plot
@@ -940,7 +960,8 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         )
     
     fig.update_layout(width=width, height=height)  # fixed size to keep caption readable
-    pio.show(fig, config=config)
+    if show_plot:
+        pio.show(fig, config=config)
 
     if save_path is not None:
         ext = save_path.lower().rsplit(".", 1)[-1]

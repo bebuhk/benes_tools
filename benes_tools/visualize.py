@@ -461,7 +461,7 @@ _TOL_HC_YELLOW = "#DDAA33"
 _TOL_HC_RED    = "#BB5566"
 
 # 2-stop gradient: blue (arrow back) -> gold (arrow tip)
-_TOL_HC_SCALE = [[0.0, _TOL_HC_BLUE], [1.0, _TOL_HC_YELLOW]]
+_TOL_HC_SCALE = [[0.0, _TOL_HC_YELLOW], [1.0, _TOL_HC_BLUE]]#_TOL_HC_RED]]#
 
 
 def _unit_sphere(n=40):
