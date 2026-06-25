@@ -520,7 +520,8 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
                                    mark_min_on_colorbar=True,  
                                    show_legend=True,
                                    plot_out_of_bounds_at_limits=False,     
-                                   show_plot=True,                       
+                                   show_plot=True,
+                                   plot_nans=True                       
                                    ):
     """
     Plot the external potential of a given system in 3D using Plotly.
@@ -581,11 +582,13 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         subtitle += lattice_info_text
 
     potentials_or = external_potential_K.flatten()
+    indices_or = np.arange(len(potentials_or))  # Original indices before filtering
     if temperature_K is not None:
         potentials_or = potentials_or / temperature_K
 
     # filter out points outside the specified bounds if provided
     mask = np.ones_like(potentials_or, dtype=bool)  # Initialize mask to include all points
+    mask_nan = np.isnan(potentials_or)  # Mask for non-NaN values
     if upper_bound is not None:
         mask_up = potentials_or <= upper_bound
         n_filtered_up = np.sum(~mask_up)
@@ -656,7 +659,11 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         hist_trace = []
 
     # Create 3D scatter plot using Plotly
-    def get_scatter_trace(x_coords, y_coords, z_coords, potentials, marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided, label_suffix=""):
+    def get_scatter_trace(mask, label_suffix=""): 
+        x_coords = x_coords_or[mask]
+        y_coords = y_coords_or[mask]
+        z_coords = z_coords_or[mask]
+        potentials = potentials_or[mask]
         return go.Scatter3d(
             x=x_coords, y=y_coords, z=z_coords,
             mode='markers',
@@ -700,18 +707,19 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
                             ),
                 opacity=0.8,
                 ),
-            text=[f"V<sup>ext</sup>: {p:.2f} {energy_unit} [gp: {i}]" for i, p in enumerate(potentials)], # Add potential values to hover text
+            text=[f"V<sup>ext</sup>: {p:.2f} {energy_unit} [gp: {indices_or[mask][i]}]" for i, p in enumerate(potentials)], # Add potential values to hover text
             name=f'{num_grid_points} grid points' if not exp_pot_provided else f'V<sup>ext</sup> ' + label_suffix + f'({len(potentials)}/{num_grid_points} gps)',
             hoverinfo='x+y+z+text'  # Show x, y, z, and potential values on hover
         )
-    scatter_plots = [get_scatter_trace(x_coords, y_coords, z_coords, potentials, marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided)]
+    scatter_plots = [get_scatter_trace(mask)]
     if plot_out_of_bounds_at_limits and exp_pot_provided:
-        scatter_plot_above_upper = get_scatter_trace(x_coords_or[~mask_up], y_coords_or[~mask_up], z_coords_or[~mask_up], potentials_or[~mask_up], marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided,
-                                                     label_suffix=f">{upper_bound:.0f} ")
-        scatter_plot_below_lower = get_scatter_trace(x_coords_or[~mask_low], y_coords_or[~mask_low], z_coords_or[~mask_low], potentials_or[~mask_low], marker_size, upper_bound, lower_bound, energy_unit, exp_pot_provided,
-                                                     label_suffix=f"<{lower_bound:.0f} ")
+        scatter_plot_above_upper = get_scatter_trace(mask = ~mask_up & ~mask_nan, label_suffix=f">{upper_bound:.0f} ")
+        scatter_plot_below_lower = get_scatter_trace(mask = ~mask_low & ~mask_nan, label_suffix=f"<{lower_bound:.0f} ")
         scatter_plots.append(scatter_plot_above_upper)
         scatter_plots.append(scatter_plot_below_lower)
+        if plot_nans:
+            scatter_plot_nans = get_scatter_trace(mask = mask_nan, label_suffix=f"= NaN ")
+            scatter_plots.append(scatter_plot_nans)
     
     #plot a cube with edge length of 10 Å at origin for distance reference if desired
     cube_traces = []
