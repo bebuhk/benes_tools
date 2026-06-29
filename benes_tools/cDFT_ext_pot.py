@@ -663,8 +663,11 @@ def FEA_Abraham(E_sum_K_na, temperature_K = 298.15):
     OUTPUT:
         Ew_Abraham: float
     """
-
-    Ew_Abraham = -temperature_K * np.log((np.sum(np.exp(-E_sum_K_na / temperature_K), axis=0))/len(E_sum_K_na))
+    sum_weights = np.sum(np.exp(-E_sum_K_na / temperature_K), axis=0)
+    if sum_weights == 0:
+        print(f"Warning: sum of weights = 0. Returning Ew_Abraham = np.inf")
+        return np.inf
+    Ew_Abraham = -temperature_K * np.log(sum_weights/len(E_sum_K_na))
     return Ew_Abraham
 
 def FEA_Abraham_ns(E_sum_K_na, temperature_K=298.15, orientation_sampling_axis=0):
@@ -680,6 +683,9 @@ def FEA_Abraham_ns(E_sum_K_na, temperature_K=298.15, orientation_sampling_axis=0
     E0 = np.min(E_sum_K_na, axis=orientation_sampling_axis)            # shift for stability
     #print(f"shift by E0 = {E0} K for numerical stability in FEA_Abraham_ns")
     z = np.sum(np.exp(-(E_sum_K_na - E0) / temperature_K), axis=orientation_sampling_axis) / N
+    if z == 0:
+        print(f"Warning: average of weights Z = 0. Returning Ew_Abraham_ns = np.inf")
+        return np.inf
     return E0 - temperature_K * np.log(z)
 
 # Boltzmann-weighted mean over orientations
@@ -687,6 +693,9 @@ def canonical_average(energies_K_na, temperature_K = 298.15):
     """canonical average (aka Boltzmann-weighted average) energy over orientations, given energies in K. (as computed in vincents 3d_paper-dft, misleadingly called Boltzmann average in the SI)"""
     w = np.exp(-energies_K_na / temperature_K)
     Z = np.sum(w, axis=0)
+    if Z == 0:
+        print(f"Warning: sum of weights Z = 0. Returning Ew = np.inf")
+        return np.inf, w
     Ew = np.sum(energies_K_na * w, axis=0) / Z
     return Ew, w
 

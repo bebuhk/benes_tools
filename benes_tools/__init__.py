@@ -1,5 +1,5 @@
 from .geometry import xyz2spherical, fibonacci_bene
-from .cDFT_helpers import read_cif, get_grid, estimate_ewald_parameters
+from .cDFT_helpers import read_cif, get_grid, estimate_ewald_parameters, get_grid_lattice_atoms, get_lattice_angles
 from .visualize import visualize_molecule, plot_SO3_orientations
 from .molecule import Molecule
 from .rotations import super_fibonacci, quats_to_matrices, matrix_to_euler_zyz, Rz, Ry, euler_zyz, euler_zyz_to_quat, get_naive_angles, estimate_angle_step_from_n_orientations, get_angle_product_tp_with_psi

@@ -6,7 +6,7 @@ import warnings
 from scipy.special import erfc, erf
 from scipy.optimize import minimize_scalar
 
-def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False, return_species=False):
+def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False, return_species=False, skip_ff=False):
     """Read a CIF file and return lattice, angles, charges, fractional atom coords,
     UFF sigma/epsilon per atom, and total unit-cell mass."""
     cif_parser = CifParser(path2cif, occupancy_tolerance=100)
@@ -32,7 +32,6 @@ def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False, r
 
     atoms_abc = structure.frac_coords  # fractional coordinates, shape (n_atoms, 3)
 
-    forcefield = pd.read_csv(path2ff, sep=r'\s+', names=['type', 'sigma', 'epsilon', 'mass'])
     mass_atom  = 1.6605402e-27  # kg / amu
     n_atoms    = structure.num_sites
     sigmas   = np.zeros(n_atoms)
@@ -40,22 +39,25 @@ def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False, r
     atom_types = []
     mass_kg  = 0.0
 
-    for i, site in enumerate(structure):
-        if ':' not in site.species_string:
-            idx = forcefield['type'] == site.species_string
-            sigmas[i]   = float(forcefield['sigma'][idx].iloc[0])
-            epsilons[i] = float(forcefield['epsilon'][idx].iloc[0])
-            mass_kg    += float(forcefield['mass'][idx].iloc[0]) * mass_atom
-            atom_types.append(site.species_string)
-        else:
-            species, occ = site.species_string.split(':')
-            occ = float(occ)
-            idx = forcefield['type'] == species
-            atom_types.append(species)
-            sigmas[i]   = float(forcefield['sigma'][idx].iloc[0])
-            epsilons[i] = float(forcefield['epsilon'][idx].iloc[0]) * occ
-            mass_kg    += float(forcefield['mass'][idx].iloc[0]) * mass_atom * occ
-            warnings.warn('Partial occupancy detected — handling may be approximate.')
+    if not skip_ff:
+        forcefield = pd.read_csv(path2ff, sep=r'\s+', names=['type', 'sigma', 'epsilon', 'mass'])
+
+        for i, site in enumerate(structure):
+            if ':' not in site.species_string:
+                idx = forcefield['type'] == site.species_string
+                sigmas[i]   = float(forcefield['sigma'][idx].iloc[0])
+                epsilons[i] = float(forcefield['epsilon'][idx].iloc[0])
+                mass_kg    += float(forcefield['mass'][idx].iloc[0]) * mass_atom
+                atom_types.append(site.species_string)
+            else:
+                species, occ = site.species_string.split(':')
+                occ = float(occ)
+                idx = forcefield['type'] == species
+                atom_types.append(species)
+                sigmas[i]   = float(forcefield['sigma'][idx].iloc[0])
+                epsilons[i] = float(forcefield['epsilon'][idx].iloc[0]) * occ
+                mass_kg    += float(forcefield['mass'][idx].iloc[0]) * mass_atom * occ
+                warnings.warn('Partial occupancy detected — handling may be approximate.')
 
     # Read partial charges from CIF
     if len(cif_parser.as_dict().keys()) != 1:
@@ -82,7 +84,9 @@ def read_cif(path2cif, path2ff='input_data/Forcefield/UFF.dat', verbose=False, r
         print(f'unit-cell mass: {mass_kg:.3e} kg (-> density: {mass_kg / volume_unit_cell*1e27:.3f} t/m3 = kg/L)')
         #print(f'force field: {path2ff.split("/")[-1]} (sigmas = {set(sigmas)}, epsilons = {set(epsilons)})')
 
-    if return_species:
+    if skip_ff:
+        return lattice, angles, charges, atoms_abc
+    elif return_species:
         return lattice, angles, charges, atoms_abc, sigmas, epsilons, mass_kg, atom_types
     else:
         return lattice, angles, charges, atoms_abc, sigmas, epsilons, mass_kg
@@ -152,6 +156,31 @@ def get_grid(
     )
     return grid_xyz, n_grid
 
+
+def get_grid_lattice_atoms(path2cif, grid_points_per_angstrom=2, ceil2power2_bool=False, all3highest_n_bool=False, path2ff=None):
+    # bene 29.6.26
+    if path2ff is None:
+        lattice, angles, charges, atoms_abc = read_cif(path2cif, skip_ff=True)
+    else:
+        lattice, angles, charges, atoms_abc, sigmas, epsilons, mass_kg = read_cif(path2cif, skip_ff=False, path2ff=path2ff)
+
+    grid_xyz, n_grid = get_grid(lattice, grid_points_per_angstrom=grid_points_per_angstrom, ceil2power2_bool=ceil2power2_bool, all3highest_n_bool=all3highest_n_bool)
+    
+    if path2ff is None:
+        return grid_xyz, lattice, atoms_abc
+    else:
+        return grid_xyz, lattice, atoms_abc, mass_kg
+    
+def get_lattice_angles(L: np.ndarray, degrees: bool = True) -> np.ndarray:
+    """Return (alpha, beta, gamma) for a lattice with row vectors a, b, c."""
+    a, b, c = L
+    lengths = np.linalg.norm(L, axis=1)            # |a|, |b|, |c|
+    cos_alpha = np.dot(b, c) / (lengths[1] * lengths[2])
+    cos_beta  = np.dot(a, c) / (lengths[0] * lengths[2])
+    cos_gamma = np.dot(a, b) / (lengths[0] * lengths[1])
+    cosines = np.clip([cos_alpha, cos_beta, cos_gamma], -1.0, 1.0)
+    angles = np.arccos(cosines)
+    return np.degrees(angles) if degrees else angles
 
 def reciprocal_lattice(cell):
     """Return reciprocal lattice vectors b_i (rows) and cell volume V. k = l1 b1 + l2 b2 + l3 b3.

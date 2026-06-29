@@ -61,7 +61,7 @@ def plot_canonical_average_analysis(E_sum_K_na, temperature_K = 298.15, return_E
         return Ew
 
 
-def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, return_Ew=False, title="", y_lim_K=1000, save_path=None, show_plot=True):
+def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, return_Ew=False, title="", y_lim_K=1000, save_path=None, show_plot=True, skip_ns_comparison=False):
     """Plot the distributions of total energies across orientations for a grid point.
     Input:
     - E_sum_K_na: (N_orientations,) array of total energies in K
@@ -81,7 +81,10 @@ def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, 
     Ew_Abraham = -temperature_K * np.log((np.sum(e2E, axis=0))/len(E_sum_K_na))
 
     Ew_FEA = FEA_Abraham_ns(E_sum_K_na, temperature_K)
-    assert np.isclose(Ew_Abraham, Ew_FEA), "FEA Abraham Ew (with numerically stable function) does not match local computation..."
+    if not skip_ns_comparison:
+        assert np.isclose(Ew_Abraham, Ew_FEA), "FEA Abraham Ew (with numerically stable function) does not match local computation..."
+    elif not np.isclose(Ew_Abraham, Ew_FEA):
+        print(f"Warning: FEA Abraham Ew (with numerically stable function) does not match local computation: {Ew_Abraham} vs {Ew_FEA} K")
     assert np.allclose(w, e2E), "Boltzmann weights do not match expected exp(-E/kT) values..."
         
     # Two plots: full dual-axis plot, and a second energy-only plot with y-cutoff at 1000 K
@@ -135,6 +138,8 @@ def plot_canonical_and_FEA_average_analysis(E_sum_K_na, temperature_K = 298.15, 
     
     if show_plot:
         plt.show()
+    else:
+        plt.close()
 
     if return_Ew:
         return Ew
@@ -206,6 +211,8 @@ def plot_energy_distributions(energies_LJ_K_na, energies_C_K_na, E_sum_K_na=None
 
     if show_plot:
         plt.show()
+    else:
+        plt.close()
 
 
 if __name__ == "__main__":

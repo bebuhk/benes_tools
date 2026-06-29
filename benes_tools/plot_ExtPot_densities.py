@@ -589,14 +589,19 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
     # filter out points outside the specified bounds if provided
     mask = np.ones_like(potentials_or, dtype=bool)  # Initialize mask to include all points
     mask_nan = np.isnan(potentials_or)  # Mask for non-NaN values
+    if np.sum(mask_nan) > 0:
+        print(f"WARNING: {np.sum(mask_nan)} grid points have NaN potential values.")
+    mask_inf = np.isinf(potentials_or)  # Mask for non-infinite values
+    if np.sum(mask_inf) > 0:
+        print(f"WARNING: {np.sum(mask_inf)} grid points have infinite potential values.")
     if upper_bound is not None:
-        mask_up = potentials_or <= upper_bound
+        mask_up = (potentials_or <= upper_bound) & ~mask_nan
         n_filtered_up = np.sum(~mask_up)
         if n_filtered_up > 0:
             print(f"WARNING: Filtering out {n_filtered_up} points above upper_bound of {upper_bound} K")
         mask &= mask_up  # Combine with existing mask
     if lower_bound is not None:
-        mask_low = potentials_or >= lower_bound
+        mask_low = (potentials_or >= lower_bound) & ~mask_nan
         n_filtered_low = np.sum(~mask_low)
         if n_filtered_low > 0:
             print(f"WARNING: Filtering out {n_filtered_low} points below lower_bound of {lower_bound} K")
