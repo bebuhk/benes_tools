@@ -699,6 +699,55 @@ def canonical_average(energies_K_na, temperature_K = 298.15):
     Ew = np.sum(energies_K_na * w, axis=0) / Z
     return Ew, w
 
+def compute_K_H(Vext_K, lattice, T_K, framework_mass_kg):
+    """Compute Henry's constant from a grid of external potential energies.
+
+    Estimates :math:`K_H` via Boltzmann-weighted ensemble averaging of the
+    external potential over the unit cell grid (Widom insertion method).
+
+    Parameters
+    ----------
+    Vext_K : ndarray, shape (nx, ny, nz)
+        External potential energy at each grid point, in K.
+    lattice : ndarray, shape (3, 3), optional
+        Lattice vectors of the unit cell, in Å (rows are vectors).
+    T_K : float, optional
+        Temperature, in K.
+    framework_mass_kg : float, optional
+        Mass of the framework unit cell, in kg.
+
+    Returns
+    -------
+    float
+        Henry's constant :math:`K_H`, in mol / (Pa kg).
+
+    Notes
+    -----
+    .. math::
+
+        K_H = \\frac{1}{R T_K} \\cdot \\frac{V_{\\mathrm{cell}}}{m_{\\mathrm{fw}}}
+              \\left\\langle e^{-V_{\\mathrm{ext}} / T_K} \\right\\rangle
+
+    where the average is taken over all grid points and :math:`V_{\\mathrm{cell}}`
+    is the unit cell volume computed from `lattice`.
+
+    Examples
+    --------
+    >>> K_H = compute_K_H(Vext_K, lattice, T=300.0, framework_mass_kg=1e-3)
+
+    or 
+
+    >>> K_H = compute_K_H(Vext_K, lattice=lattice, T_K=setup.temperature_K, framework_mass_kg=mass_kg)
+    """
+    Vext_K_flatten = Vext_K.reshape(-1)
+    N = len(Vext_K_flatten)
+    R = 8.31446261815324 # J/(mol*K)
+    volume_unit_cell_m3 = np.abs(np.dot(lattice[0], np.cross(lattice[1], lattice[2]))) * 10**-30 # convert from Å³ to m³
+    sum = np.sum(np.exp(-Vext_K_flatten / T_K))/N # unitless
+    K_H_mol_per_Pa_m3 = sum / (R * T_K) # mol / Pa m3
+    K_H_mol_per_Pa = K_H_mol_per_Pa_m3 *volume_unit_cell_m3 # convert to mol / Pa
+    K_H_mol_per_Pa_kg = K_H_mol_per_Pa / framework_mass_kg # convert to mol / Pa kg
+    return K_H_mol_per_Pa_kg
 
 def main():
     pass
