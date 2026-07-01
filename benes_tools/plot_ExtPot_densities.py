@@ -521,7 +521,8 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
                                    show_legend=True,
                                    plot_out_of_bounds_at_limits=False,     
                                    show_plot=True,
-                                   plot_nans=True                       
+                                   plot_nans=True,
+                                   K_H_mol_per_Pa_kg=None,                      
                                    ):
     """
     Plot the external potential of a given system in 3D using Plotly.
@@ -581,6 +582,9 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         lattice_info_text = f"<br>lattice: α={get_angle_between_vectors(lattice[1], lattice[2]):.2f}°, β={get_angle_between_vectors(lattice[0], lattice[2]):.2f}°, γ={get_angle_between_vectors(lattice[1], lattice[0]):.2f}°. V={volume_unit_cell_A3:.2f} Å³, per gp:{grid_point_volume:.6f} Å³"#({num_grid_points} gps)<br>"
         subtitle += lattice_info_text
 
+    if K_H_mol_per_Pa_kg is not None:
+        subtitle += f"<br>Henry coefficient K_H = {K_H_mol_per_Pa_kg:.5e} mol/Pa·kg"
+        
     potentials_or = external_potential_K.flatten()
     indices_or = np.arange(len(potentials_or))  # Original indices before filtering
     if temperature_K is not None:
