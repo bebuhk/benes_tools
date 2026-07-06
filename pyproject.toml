@@ -16,7 +16,8 @@ dependencies = [
     "pandas>=3.0.2",
     "pymatgen>=2026.3.23",
     "scipy>=1.17.1",
-    "si-units>=0.11.4",
+    #"si-units>=0.11.4",
+    "si-units>=0.11.0",
 ]
 
 [build-system]
