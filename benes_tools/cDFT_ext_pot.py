@@ -498,6 +498,51 @@ def calc_LJ(
 
     return LJ, tail_correction
 
+def tail_single_interaction(epsilon_ij, sigma_ij, volume_cell, rcut=14.0):
+    r"""Compute the tail correction for a single pair interaction in a periodic system.
+    
+    Parameters
+    ----------
+    epsilon_ij : float
+        Well depth :math:`\varepsilon_{ab}/k_B` of the pair, in K.
+    sigma : float
+        Size parameter :math:`\sigma_{ab}` of the pair, in angstrom.
+    volume_cell : float
+        Volume of the unit cell, in angstrom^3.
+    r_cut : float
+        Van der Waals cutoff radius :math:`r_c`, in angstrom. Must be the
+        same cutoff used in the simulation the result is compared against.
+
+    Returns
+    -------
+    float
+        Integral :math:`I(\sigma_{ab}, \varepsilon_{ab})` in K .
+        Negative for any physical LJ pair with ``r_cut`` beyond the minimum,
+        since the attractive branch dominates past the cutoff.
+
+    Notes
+    -----
+    .. math::
+    computes 
+
+        I(\sigma_{ab}, \varepsilon_{ab})
+        = \int_{r_c}^{\infty} r^2\, u_{ab}^{\mathrm{LJ}}(r)\, \mathrm{d}r
+        = \frac{8}{3}\pi\varepsilon_{ab}\sigma_{ab}^{3}
+          \left[\frac{1}{3}\left(\frac{\sigma_{ab}}{r_c}\right)^{9}
+                - \left(\frac{\sigma_{ab}}{r_c}\right)^{3}\right]
+        so that 
+        U_{tail,RASPA} = \sum_i^N \sum_j^N \cdot I(\sigma_{ij}, \varepsilon_{ij})
+        and 
+        U_{tail,s-f} = 2 \cdot \sum_i^{N_s} \sum_j^{N_f} \cdot I(\sigma_{ij}, \varepsilon_{ij})
+        with N = N_s + N_f.
+
+    """
+    return (
+        2* np.pi / volume_cell* 4/ 3
+        * epsilon_ij* sigma_ij**3
+        * (1 / 3 * (sigma_ij / rcut) ** 9 - (sigma_ij / rcut) ** 3)
+    )
+
 
 def get_inf_mask_close2atom(
     coords_abc,
