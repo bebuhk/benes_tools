@@ -543,6 +543,15 @@ def tail_single_interaction(epsilon_ij, sigma_ij, volume_cell, rcut=14.0):
         * (1 / 3 * (sigma_ij / rcut) ** 9 - (sigma_ij / rcut) ** 3)
     )
 
+def compute_U_tail_for_set_s_f(set_epsilons_s, set_sigmas_s, set_epsilons_f, set_sigmas_f, volume_cell, rcut=14.0):
+    """computes U_tail_s-f = 2 * sum_i^N_s sum_j^N_f I(sigma_ij, epsilon_ij) with N = N_s + N_f."""
+    assert len(set_epsilons_s) == len(set_sigmas_s), "set_epsilons_s and set_sigmas_s must have the same length."
+    assert len(set_epsilons_f) == len(set_sigmas_f), "set_epsilons_f and set_sigmas_f must have the same length."
+    U_tail = 0
+    for i in range(len(set_sigmas_s)):
+        for j in range(len(set_sigmas_f)):
+            U_tail += tail_single_interaction(epsilon_ij=np.sqrt(set_epsilons_s[i] * set_epsilons_f[j]), sigma_ij=(set_sigmas_s[i] + set_sigmas_f[j]) / 2, volume_cell=volume_cell, rcut=rcut)
+    return 2 * U_tail
 
 def get_inf_mask_close2atom(
     coords_abc,
