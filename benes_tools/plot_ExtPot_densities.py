@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from .geometry import get_angle_between_vectors
 from .tols_colors import get_cmap
+import os
 # import matplotlib.pyplot as plt
 # from matplotlib import cm
 
@@ -522,7 +523,10 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
                                    plot_out_of_bounds_at_limits=False,     
                                    show_plot=True,
                                    plot_nans=True,
-                                   K_H_mol_per_Pa_kg=None,                      
+                                   K_H_mol_per_Pa_kg=None,   
+                                   K_H_comment="",
+                                   extend_title="",
+                                   infotext=None, x_info=0.85, y_info=0.5
                                    ):
     """
     Plot the external potential of a given system in 3D using Plotly.
@@ -571,6 +575,7 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         if mark_min_on_colorbar:
             print("WARNING: mark_min_on_colorbar=True but no external_potential is provided. Ignoring mark_min_on_colorbar.")
             mark_min_on_colorbar = False
+    title += extend_title
     if overwrite_title is not None:
         title = overwrite_title
 
@@ -583,7 +588,7 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         subtitle += lattice_info_text
 
     if K_H_mol_per_Pa_kg is not None:
-        subtitle += f"<br>Henry coefficient K_H = {K_H_mol_per_Pa_kg:.5e} mol/Pa·kg"
+        subtitle += f"<br>Henry coefficient K_H = {K_H_mol_per_Pa_kg:.5e} mol/Pa·kg" + f" {K_H_comment}"
         
     potentials_or = external_potential_K.flatten()
     indices_or = np.arange(len(potentials_or))  # Original indices before filtering
@@ -849,7 +854,6 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
     else:
         aspect_ratio = dict(x=1, y=1, z=1)   # nothing to scale to
 
-
     # Set layout for 3D plot
     layout = go.Layout(
         title={
@@ -975,8 +979,24 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
             xref="paper", yref="paper",
             line=dict(color="black", width=2),
         )
+
+    # add infotext
+    if infotext is not None:
+        #print(f"Adding infotext to figure: {infotext}")
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=x_info, y=y_info,           # top-left corner
+            xanchor="left", yanchor="top",
+            showarrow=False,
+            align="left",
+            text=infotext,
+            font=dict(size=8),
+            bordercolor="red", borderwidth=1, borderpad=4,
+            bgcolor="white", opacity=0.8,
+        )
     
-    fig.update_layout(width=width, height=height)  # fixed size to keep caption readable
+    #fig.update_layout(width=width, height=height)  # fixed size to keep caption readable
+    fig.update_layout(width=width, height=height, margin=dict(l=60, r=60, t=60, b=60))
     if show_plot:
         pio.show(fig, config=config)
 
@@ -984,7 +1004,9 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         ext = save_path.lower().rsplit(".", 1)[-1]
         if ext in {"svg", "pdf", "png"}:
             try:
-                fig.write_image(save_path, width=width, height=height)
+                #fig.write_image(save_path, width=width, height=height)
+                #fig.write_image(save_path)
+                fig.write_image(save_path, width=width, height=height, scale=2)
             except Exception as e:
                 html_path = save_path.rsplit(".", 1)[0] + ".html"
                 fig.write_html(html_path)
@@ -996,4 +1018,3 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         else:
             raise ValueError(f"unsupported save_path extension: {ext}")
         print(f"Wrote {save_path}")
-

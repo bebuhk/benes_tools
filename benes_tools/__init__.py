@@ -6,6 +6,7 @@ from .rotations import super_fibonacci, quats_to_matrices, matrix_to_euler_zyz, 
 from .cDFT_ext_pot import ewald_lr_grid, calc_C_sr_ExtPot, calc_C_sr_ExtPot_c, calc_LJ, get_inf_mask_close2atom, get_inf_mask_poreblocking, compute_num_images, FEA_Abraham, FEA_Abraham_ns, canonical_average,  get_kvec, get_N_kvecs, get_N_kvecs_LEGACY, build_kvectors, reciprocal_lattice, build_kvectors_LEGACY, compute_K_H, tail_single_interaction, compute_U_tail_for_set_s_f
 from .plot_averages import plot_canonical_average_analysis, plot_canonical_and_FEA_average_analysis, plot_energy_distributions
 from .plot_ExtPot_densities import plot_external_potential_3D, plot_external_potential_3D_with_histogram
+from .utilities import format_duration
 # from .tols_colors import rainbow_discrete, smooth_rainbow, get_cmap
 
 __version__ = "0.1.0"
