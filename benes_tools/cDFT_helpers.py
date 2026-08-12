@@ -103,6 +103,7 @@ def get_grid(
     grid_points_per_angstrom=2,
     ceil2power2_bool=False,
     all3highest_n_bool=False,
+    only_n_grid=False,
 ):
     """_Creates a grid of xyz coordinates for gridpoints (per unitcell vector direction) evenly spaced in a given lattice._
 
@@ -126,6 +127,8 @@ def get_grid(
     n_grid = [
         int(L * grid_points_per_angstrom) for L in np.linalg.norm(lattice, axis=1)
     ]  # i.e. L in [a,b,c], int always rounds down
+    if only_n_grid:
+        return n_grid
 
     # round up to the next higher exponent of 2
     if ceil2power2_bool:
@@ -156,6 +159,28 @@ def get_grid(
     )
     return grid_xyz, n_grid
 
+def get_gpa_for_n_gridpoints(n_gridpoints, lattice):
+    """this function returns the grid points per angstrom (gpa) so that - for the given lattice - the number of grid points in the largest dimension (longest lattice vector) is equal to n_gridpoints. 
+    
+    This is useful for creating a grid with n_gridpoints in each dimension via
+
+    grid_xyz, n_grid = get_grid(
+        lattice,
+        grid_points_per_angstrom=get_gpa_for_n_gridpoints(n_gridpoints, lattice),
+        ceil2power2_bool=False,
+        all3highest_n_bool=True,
+    )
+
+    (e.g. getting a grid with 64 grid points in each dimension for a given lattice)
+    """
+
+    # get_grid takes int(L * gpa) for L in np.linalg.norm(lattice, axis=1) as n_grid.
+    # we only look at the largest L, i.e.
+    L_max = np.max(np.linalg.norm(lattice, axis=1))
+
+    # now, to have int(L_max * gpa) = n_gridpoints, we need to solve for gpa:
+    gpa = (n_gridpoints+0.5) / L_max # the +0.5 is for numerical stability. (int(64.5) = 64
+    return gpa
 
 def get_grid_lattice_atoms(path2cif, grid_points_per_angstrom=2, ceil2power2_bool=False, all3highest_n_bool=False, path2ff=None):
     # bene 29.6.26
