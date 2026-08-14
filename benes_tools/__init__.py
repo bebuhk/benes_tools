@@ -7,6 +7,7 @@ from .cDFT_ext_pot import ewald_lr_grid, calc_C_sr_ExtPot, calc_C_sr_ExtPot_c, c
 from .plot_averages import plot_canonical_average_analysis, plot_canonical_and_FEA_average_analysis, plot_energy_distributions
 from .plot_ExtPot_densities import plot_external_potential_3D, plot_external_potential_3D_with_histogram
 from .utilities import format_duration
+from .error_metrics import mard_mad_mrd_md_calc
 # from .tols_colors import rainbow_discrete, smooth_rainbow, get_cmap
 
 __version__ = "0.1.0"
