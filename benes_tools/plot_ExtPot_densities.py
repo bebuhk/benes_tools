@@ -526,7 +526,9 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
                                    K_H_mol_per_Pa_kg=None,   
                                    K_H_comment="",
                                    extend_title="",
-                                   infotext=None, x_info=0.85, y_info=0.5
+                                   infotext=None, x_info=0.85, y_info=0.5,
+                                   center_on_data=True,          # new kwarg
+                                      omit_lattice_text=False,      # new kwarg
                                    ):
     """
     Plot the external potential of a given system in 3D using Plotly.
@@ -584,8 +586,9 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
         grid_point_volume = volume_unit_cell_A3 / num_grid_points # in Å³
         #lattice_info_text = f"lattice: |a1|={np.linalg.norm(lattice[0]):.2f}, |a2|={np.linalg.norm(lattice[1]):.2f}, |a3|={np.linalg.norm(lattice[2]):.2f}Å," + f' V={volume_unit_cell_A3:.2f} Å³, per gp:{grid_point_volume:.6f} Å³<br>'
         #lattice_info_text = f"lattice: alpha={get_angle_between_vectors(lattice[1], lattice[2])}°, beta={get_angle_between_vectors(lattice[1], lattice[2])}°, gamma={get_angle_between_vectors(lattice[0], lattice[2])}°. f' V={volume_unit_cell_A3:.2f} Å³, per gp:{grid_point_volume:.6f} Å³ ({num_grid_points} gps)<br>"
-        lattice_info_text = f"<br>lattice: α={get_angle_between_vectors(lattice[1], lattice[2]):.2f}°, β={get_angle_between_vectors(lattice[0], lattice[2]):.2f}°, γ={get_angle_between_vectors(lattice[1], lattice[0]):.2f}°. V={volume_unit_cell_A3:.2f} Å³, per gp:{grid_point_volume:.6f} Å³"#({num_grid_points} gps)<br>"
-        subtitle += lattice_info_text
+        if not omit_lattice_text:
+            lattice_info_text = f"<br>lattice: α={get_angle_between_vectors(lattice[1], lattice[2]):.2f}°, β={get_angle_between_vectors(lattice[0], lattice[2]):.2f}°, γ={get_angle_between_vectors(lattice[1], lattice[0]):.2f}°. V={volume_unit_cell_A3:.2f} Å³, per gp:{grid_point_volume:.6f} Å³"#({num_grid_points} gps)<br>"
+            subtitle += lattice_info_text
 
     if K_H_mol_per_Pa_kg is not None:
         subtitle += f"<br>Henry coefficient K_H = {K_H_mol_per_Pa_kg:.5e} mol/Pa·kg" + f" {K_H_comment}"
@@ -854,6 +857,35 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
     else:
         aspect_ratio = dict(x=1, y=1, z=1)   # nothing to scale to
 
+        # --- rotation pivot -------------------------------------------------
+    if cubic_frame is not None:
+        axis_ranges = [(cubic_frame_min, cubic_frame)] * 3
+    elif has_data:
+        axis_ranges = [(x_coords.min(), x_coords.max()),
+                    (y_coords.min(), y_coords.max()),
+                    (z_coords.min(), z_coords.max())]
+    else:
+        axis_ranges = [(-1, 1)] * 3
+
+    if center_on_data and has_data:
+        # bbox center of the plotted points, in Å
+        pivot_A = (0.5 * (x_coords.min() + x_coords.max()),
+                0.5 * (y_coords.min() + y_coords.max()),
+                0.5 * (z_coords.min() + z_coords.max()))
+        # Å -> normalized scene units
+        cx, cy, cz = (
+            (c - 0.5 * (lo + hi)) / (0.5 * (hi - lo))
+            for c, (lo, hi) in zip(pivot_A, axis_ranges)
+        )
+    else:
+        cx, cy, cz = x_center_scene, y_center_scene, 0.0
+
+    camera = dict(
+        eye=dict(x=x_cam + cx, y=y_cam + cy, z=z_cam + cz),  # keep view dir & zoom
+        up=dict(x=0, y=0, z=1),
+        center=dict(x=cx, y=cy, z=cz),
+    )
+
     # Set layout for 3D plot
     layout = go.Layout(
         title={
@@ -866,12 +898,13 @@ def plot_external_potential_3D_with_histogram(grid_xyz, external_potential_K=Non
             zaxis_title='Z [Å]',
             domain=dict(x=[0.0, 1.0], y=[0.0, 1.0]),   # <- fixed horizontal placement (of scene)
             #domain=dict(x=[0.30, 0.82], y=[0.0, 0.88]),  # pull right edge in from 1.0, top in from 1.0
-            camera=dict(
-            # eye=dict(x=1.25, y=1.25, z=1.25),  # Adjust the initial camera position
-            eye=dict(x=x_cam, y=y_cam, z=z_cam),  # Adjust the initial camera position
-            up=dict(x=0, y=0, z=1),  # Define the up direction
-            center=dict(x=x_center_scene, y=y_center_scene, z=0)  # Define the center of the scene
-            ),
+            camera=camera,
+            # camera=dict(
+            # # eye=dict(x=1.25, y=1.25, z=1.25),  # Adjust the initial camera position
+            # eye=dict(x=x_cam, y=y_cam, z=z_cam),  # Adjust the initial camera position
+            # up=dict(x=0, y=0, z=1),  # Define the up direction
+            # center=dict(x=x_center_scene, y=y_center_scene, z=0)  # Define the center of the scene
+            # ),
             aspectratio=aspect_ratio, #dict(x=1, y=1, z=1), ## Adjust the aspect ratio
             aspectmode='manual',
             #xaxis=dict(backgroundcolor="rgba(0,0,0,0)", showbackground=False), # change axis background to transparent
