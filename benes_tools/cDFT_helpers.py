@@ -127,8 +127,6 @@ def get_grid(
     n_grid = [
         int(L * grid_points_per_angstrom) for L in np.linalg.norm(lattice, axis=1)
     ]  # i.e. L in [a,b,c], int always rounds down
-    if only_n_grid:
-        return n_grid
 
     # round up to the next higher exponent of 2
     if ceil2power2_bool:
@@ -138,6 +136,9 @@ def get_grid(
         n_grid = [max(n_grid)] * 3
 
     # n_grid = [33, 33, 33]  # for testing
+
+    if only_n_grid:
+        return n_grid
 
     # Create a grid of indices
     i, j, k = np.indices(
